@@ -1,0 +1,3 @@
+[submodule "static/client/sources/cmdenv"]
+	path = static/client/sources/cmdenv
+	url = git@github.com:Vision940/cmdenv.git

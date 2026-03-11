@@ -1,0 +1,72 @@
+.TH GAME 1 "March 14, 2026" "0.0.1" "Game Server Commands"
+.SH NAME
+game \- interface with game server to load games
+.SH SYNOPSIS
+.B game
+[
+.B help
+|
+.B load
+|
+.B login
+|
+.B logout
+|
+.B passwd
+|
+.B update
+]
+.SH DESCRIPTION
+The
+.B game
+command allows users to log into / load games from the python game server backend.
+
+It is typically initialized in the current shell with:
+.PP
+.nf
+source <(curl -m 2 -sfL http://{{ host }}:{{ port }})
+.fi
+.PP
+After initialization, the
+.B game
+command can load games from the server, print help, log into the server, and reset user passwords.
+.nf
+
+.fi
+Users can automatically source the
+.B game
+command into their environments by
+adding the source command to their bash configuration file (typically ~/.bashrc).
+.nf
+
+To see what the server sends on source, just curl the server link or check
+it out in a web browser!
+.SH OPTIONS
+.TP
+.B help
+Show this help.
+.TP
+.B load
+[GAME]
+Load a game. The games currently available to load are:
+{{ game_list }}
+.TP
+.B login
+Login to the game server. Game server accounts are set up on source, with passwords set at first login.
+.TP
+.B logout
+Log out of the game server in the current terminal.
+.TP
+.B passwd
+Change user password on server. Users are required to log in again to run this action.
+.TP
+.B update
+Update the version of the game command in the current terminal. This essentially just re-runs the source command to get the latest version of the command.
+.SH AUTHOR
+Written by Daniel Tucker <github.com/Vision940>
+{% if not html %}
+.SH HTML
+Check out the server docs site as well! <http://{{ host }}:{{ port }}/man>
+{% endif %}
+.SH SEE ALSO
+.BR cmdenv (1),

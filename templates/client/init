@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+# Script to init a client
+# Users access the server capabilities by running:
+# source <(curl -sfL http://<hostname>:<port>/)
+
+export GS_HOST="{{ host }}"
+export GS_PORT="{{ port }}"
+export GS_URL="http://$GS_HOST:$GS_PORT"
+export GS_SERVER_API_VER="{{ server_ver }}"
+
+# __gs_source_template PATH ROUTE
+__gs_source_file() {
+  local serverPath=${2:-static/client}
+  declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Sourcing $1..."
+  source <(curl -sfL "$GS_URL/$serverPath/$1")
+}
+# needs openssl awk bc? curl jq groff less
+
+# Prioritize id and whoami to avoid impersonation
+export GS_USER=$(id -u -n || whoami || echo $USER)
+__gs_source_file game
+export GS_API_KEY=$(__gs_request _apikey_)
+

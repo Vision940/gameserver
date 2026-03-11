@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+# File's functions self destruct mostly just for fun
+# This does somewhat prevent users from finding set passwd and trying to run it though
+__gs_userctl_cleanup() {
+  __gs_module_selfdestruct functions/userctl
+}
+
+__gs_passwd_prompt() {
+  local password hashedPassword
+  read -rs -t 10 -p "$(__gs_infomsg "Please enter ${1:+$1 }password: " "-n")" password
+  [[ $? -gt 128 ]] &&
+    { __gs_errormsg "Timed out"; return 1; }
+
+  [[ -z "$password" ]] &&
+    { __gs_errormsg "\nPassword cannot be empty."; return 1; }
+  hashedPassword=$(openssl dgst -sha256 <<<"$password" | awk '{print $2}')
+  unset password
+
+  echo $hashedPassword
+}
+
+__gs_set_passwd() {
+  __gs_infomsg "Setting user password for $GS_USER..."
+  local setPasswd=$(__gs_curl_post passwd password $1) || return 1
+  if __gs_response_valid "$setPasswd"; then
+    GS_API_KEY=$(__gs_parse_response ".key" "$setPasswd") || return 1
+    __gs_infomsg "Successfully logged in $GS_USER!"
+  else
+    __gs_errormsg "Error setting password. Please try again or contact an administrator for assistance."
+  fi
+}
+

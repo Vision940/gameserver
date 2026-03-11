@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+## Functions to fetch code from server
+## __gs_source_file isn't here because it is needed in init
+
+# __gs_source_template PATH
+__gs_source_template() {
+  __gs_source_file "$1" templates
+}
+
+# __gs_module_selfdestruct MODULE ROUTE
+__gs_module_selfdestruct() {
+  local serverPath=${2:-static/client}
+  local fxns="$(sed -ne 's/^\(__gs_[^(]\+\)() {$/\1/p' <(curl -sfL $GS_URL/$serverPath/$1))"
+  unset -f $fxns
+}
+
+#TODO: __gs_load_game_lib that loads a game's libraries/sprite files to /tmp cache
+

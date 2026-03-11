@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GS {{ name }} Docs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/man.css') }}">
+</head>
+<body>
+  <p><a href="/man">Index</a></p>
+  {{ rendered | safe }}
+</body>
+</html>

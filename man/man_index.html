@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GS Man</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/man.css') }}">
+</head>
+<body>
+  <h1>Game Server Man Pages</h1>
+  <ul>
+    {% for page in pages %}
+      <li>
+        <a href="{{ page.html_url }}">{{ page.name }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

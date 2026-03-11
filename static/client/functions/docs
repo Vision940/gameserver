@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+__gs_doccer() {
+  local caller=${FUNCNAME[-1]}
+  local manpage
+  manpage="$(curl -sfL "$GS_URL/man/${caller}.1")" || {
+    __gs_errormsg "Could not open man page for $caller"
+    return 1
+  }
+
+  printf '%s' "$manpage" | groff -Tutf8 -man | less -RF || {
+    __gs_errormsg "Could not render man page for $caller"
+    return 1
+  }
+}
+

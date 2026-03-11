@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+GS_IMPORTS=(
+  sources/cmdenv/cmdenv
+  functions/{docs,fetcher,messenger,logging}
+)
+
+for import in ${GS_IMPORTS[@]}; do
+  __gs_source_file $import
+done
+
+game() {
+  __gs_setdebug $1 || shift
+
+  if [[ "${GS_API_KEY:-null}" == "null" && "$1" != "login" ]]; then
+    __gs_errormsg "Please log in to the game server with \`${FUNCNAME[-1]} login\` to continue."
+    __gs_errormsg "If logging in for the first time, input desired password to login prompt."
+    return 1
+  fi
+
+  case _$1_ in
+    # User-facing functionality
+    #TODO: Add load (and a game to load!)
+    _login_) : Log into the server
+      [[ -n "$GS_API_KEY" ]] && {
+        __gs_errormsg "You are already logged in";
+        __gs_errormsg "Run \`${FUNCNAME[-1]} logout\` to log out."
+        return;
+      }
+      __gs_source_file functions/userctl || return 1
+
+      local hashedPassword
+      hashedPassword=$(__gs_passwd_prompt) || { __gs_userctl_cleanup; return 1; }
+      echo
+
+      __gs_request _login_ $hashedPassword || { __gs_userctl_cleanup; return 1; }
+
+      __gs_userctl_cleanup
+    ;;
+    _passwd_) : Change server password
+      __gs_source_file functions/userctl || return 1
+
+      local password hashedPassword
+      unset GS_API_KEY
+      __gs_infomsg "Changing password for $GS_USER..."
+      hashedPassword=$(__gs_passwd_prompt current) || { __gs_userctl_cleanup; return 1; }
+      echo
+
+      __gs_request _login_ $hashedPassword || { __gs_userctl_cleanup; return 1; }
+      if [[ -n "$GS_API_KEY" ]]; then
+        hashedPassword=$(__gs_passwd_prompt new) || { __gs_userctl_cleanup; return 1; }
+        echo
+        __gs_set_passwd $hashedPassword || { __gs_userctl_cleanup; return 1; }
+      else
+        __gs_errormsg "Could not log in with existing password."
+      fi
+
+      __gs_userctl_cleanup
+    ;;
+    _logout_) : Log out of the server
+      # It's kind of dumb to make this an option but it could also make sense later
+      unset GS_API_KEY
+    ;;
+    _update_) : Get latest version of game
+      # Refresh self
+      local curver="$GS_SERVER_API_VER"
+      __gs_infomsg "Grabbing latest update from server..."
+      source <(curl -sfL $GS_URL)
+      if [[ "$curver" != "$GS_SERVER_API_VER" ]]; then
+        __gs_infomsg "Done!"
+      else
+        __gs_warnmsg "No new changes detected."
+      fi
+    ;;
+    _help_) : Print game help
+      __gs_doccer
+    ;;
+    __)
+      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+    ;;
+    *)
+      __gs_errormsg "Option $1 not found."
+      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+  esac
+}
+__gs_source_template game-completion
+

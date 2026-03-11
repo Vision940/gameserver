@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+GS_DEBUGLEVEL=0
+
+# __gs_debugmsg "MSG" [LEVEL=[0,1,2]]
+__gs_debugmsg() {
+  [[ $GS_DEBUGLEVEL -lt "${2:-1}" ]] && return
+
+  echo -e "${FUNCNAME[-1]}: [\033[35;1mD${2:-1}\033[0m] $1" 1>&2
+}
+
+# __gs_setdebug [-v[v[v[...]]]]
+__gs_setdebug() {
+  local input="${1#-}"
+  local level=0
+
+  if [[ "$1" =~ ^"-v" ]]; then
+    level="${#input}"
+  fi
+
+  export GS_DEBUGLEVEL=$level
+  __gs_debugmsg "Running with debug level $GS_DEBUGLEVEL"
+
+  return $level
+}
+
+# __gs_errormsg "ERR" FATALFLAG
+__gs_errormsg() {
+  echo -e "${FUNCNAME[-1]}: [\033[31;1m${2:+FATAL }ERROR\033[0m] $1" 1>&2
+}
+
+# __gs_infomsg "MSG" "FLAGS"
+__gs_infomsg() {
+  echo $2 -e "${FUNCNAME[-1]}: [INFO] $1" 1>&2
+}
+
+# __gs_warnmsg "MSG"
+__gs_warnmsg() {
+  echo -e "${FUNCNAME[-1]}: [\033[93;1mWARN\033[0m] $1" 1>&2
+}
+
