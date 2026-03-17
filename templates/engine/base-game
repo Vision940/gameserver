@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+## templates/engine/base-game ##
+## This template provides the backbone for each gameserver game
+##
+## What this enables is a consistent, streamlined experience for both developing
+##   and using the game server
+## Games are rendered from Game objects in python created from <game>.json files
+##   in static/games/configs/
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+# Source actual game implementation
+__gs_source_file {{ game.cmd_name }} static/games
+if ! declare -f __gs_{{ game.cmd_name }}_main &>/dev/null; then
+  __gs_errormsg "Could not source {{ game.cmd_name }} - main function not found in static/games/{{ game.cmd_name }}"
+  return
+fi
+
+GS_{{ game.cmd_name | upper }}_VERSION={{ game.version }}
+
+# Source game imports
+__gs_{{ game.cmd_name }}_imports() {
+  local import
+  local route=$1
+  shift
+
+  for import in $@; do
+    __gs_source_file $import $route
+  done
+}
+__gs_{{ game.cmd_name }}_imports static {{ game.imports.statics | join(' ') }}
+__gs_{{ game.cmd_name }}_imports templates {{ game.imports.templates | join(' ') }}
+unset -f __gs_{{ game.cmd_name }}_imports
+
+# Provide rendered user-facing game command
+{{ game.cmd_name }}() {
+  #TODO: add getopt parsing for --quiet, --help, etc
+  case _$1_ in
+    _play_) : Play the game
+      echo I\'m playing {{ game.full_name }}!
+      __gs_{{ game.cmd_name }}_main
+    ;;
+    _help_) : Open {{ game.cmd_name }} help
+      echo To be implemented!
+    ;;
+    __)
+      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+    ;;
+    *)
+      __gs_errormsg "Option $1 not found."
+      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+  esac
+}
+__gs_source_template {{ game.cmd_name }}-completion
+

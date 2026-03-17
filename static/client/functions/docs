@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+## static/client/functions/docs ##
+## Provides functions relating to gameserver documentation
+##
+## Functions:
+##   __gs_doccer
+##     function that opens server man page from URL/man/CALLER.1
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
 __gs_doccer() {
   local caller=${FUNCNAME[-1]}
   local manpage

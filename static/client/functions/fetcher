@@ -1,11 +1,29 @@
 #!/usr/bin/env bash
 
-## Functions to fetch code from server
-## __gs_source_file isn't here because it is needed in init
+## static/client/functions/fetcher ##
+## Provides functions to fetch code from server
+##
+## Functions:
+##   __gs_source_template PATH
+##     function to source rendered templates from server at PATH
+##   __gs_source_games GAME
+##     function to source a game from the static/games path
+##   __gs_module_selfdestruct MODULE ROUTE
+##     function to dynamically unset all functions provided by MODULE at ROUTE on server
+##     default ROUTE is static/client
+##
+##   __gs_source_file isn't here because it is needed in init
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
 
 # __gs_source_template PATH
 __gs_source_template() {
   __gs_source_file "$1" templates
+}
+
+__gs_source_games() {
+  __gs_source_file "$1" games
 }
 
 # __gs_module_selfdestruct MODULE ROUTE

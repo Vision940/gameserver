@@ -1,11 +1,32 @@
 #!/usr/bin/env bash
 
+## static/client/functions/logging ##
+## Provides functions to print consistent logs from server commands
+##
+## Functions:
+##   __gs_debugmsg "MSG" [LEVEL=(0-9)+]
+##     function that prints debug MSG if GS_DEBUGLEVEL is >= LEVEL
+##   __gs_setdebug [-v[v[v[...]]]]
+##     function that sets GS_DEBUGLEVEL according to how many v chars in $1
+##     idea is to only enable debug when functions called with -v+ as first arg
+##     returns debug level so that functions can run `__gs_setdebug $1 || shift`
+##   __gs_errormsg "ERR" [FATALFLAG]
+##     function to print error ERR
+##     will print as FATAL ERROR if FATALFLAG is set
+##   __gs_infomsg "MSG" ["FLAGS"]
+##     function to print info MSG
+##     will run echo with FLAGS if provided
+##   __gs_warnmsg "MSG"
+##     function to print warning MSG
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
 GS_DEBUGLEVEL=0
 
-# __gs_debugmsg "MSG" [LEVEL=[0,1,2]]
+# __gs_debugmsg "MSG" [LEVEL=(0-9)+]
 __gs_debugmsg() {
-  [[ $GS_DEBUGLEVEL -lt "${2:-1}" ]] && return
-
+  (( $GS_DEBUGLEVEL < ${2:-1} )) && return
   echo -e "${FUNCNAME[-1]}: [\033[35;1mD${2:-1}\033[0m] $1" 1>&2
 }
 
@@ -24,12 +45,12 @@ __gs_setdebug() {
   return $level
 }
 
-# __gs_errormsg "ERR" FATALFLAG
+# __gs_errormsg "ERR" [FATALFLAG]
 __gs_errormsg() {
   echo -e "${FUNCNAME[-1]}: [\033[31;1m${2:+FATAL }ERROR\033[0m] $1" 1>&2
 }
 
-# __gs_infomsg "MSG" "FLAGS"
+# __gs_infomsg "MSG" ["FLAGS"]
 __gs_infomsg() {
   echo $2 -e "${FUNCNAME[-1]}: [INFO] $1" 1>&2
 }

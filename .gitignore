@@ -1,2 +1,3 @@
 data/users.json
+data/games/*.json
 __pycache__

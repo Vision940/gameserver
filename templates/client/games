@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+## templates/client/games ##
+## Lightweight client template to create placeholder game functions
+##
+## Idea here is we don't want to flood client envs with functions/env vars/etc
+##   that they might not use
+## Instead, we create self-destructing placeholder functions that fetch the
+##   latest version of the relevant game when run
+## This way, client users can run a specific game command on source, but they
+##   don't have to have their environments flooded with gameserver code
+##
+## This provides a function for every game in the game list, currently:
+##   - {{ game_list | join('\n##   - ') }}
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+GS_GAME_LIST="{{ game_list | join(' ') }}"
+
+{% for game in game_list %}
+{{ game }}() {
+  __gs_infomsg "Loading latest version of {{ game }} from server..."
+  unset -f {{ game }} # Unset placeholder function (this)
+  __gs_source_games {{ game }} # Set up real function
+  command -v {{ game }} &>/dev/null && {{ game }} $@
+}
+{% endfor %}
+

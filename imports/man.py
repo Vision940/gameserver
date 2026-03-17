@@ -13,6 +13,7 @@ from jinja2 import (
 )
 
 from imports import config
+from imports.games import GAME_LIST
 
 CONFIG = config.load_config(config.SERVER_CONFIG)
 MAN_DIR = "man"
@@ -26,7 +27,7 @@ def man(name):
             f"{name}.1",
             host=CONFIG.host,
             port=CONFIG.port,
-            game_list=""
+            game_list=f"\n{', '.join(GAME_LIST)}"
         )
     except TemplateNotFound:
         abort(404)

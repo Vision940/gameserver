@@ -1,13 +1,35 @@
 #!/usr/bin/env bash
 
-GS_IMPORTS=(
+## static/client/game ##
+## This file provides the game function to gameserver users and imports
+##   necessary functions from the server for game to run correctly
+##
+## Imports:
+##   cmdenv - sourced here but used in games for terminal-style text input
+##   tput - tput wrapper to speed up drawing in all games using ANSI esc codes
+##   docs - renders man help pages for gameserver suite
+##   fetcher - functions to fetch code from server
+##   messenger - functions to enable server messaging for logins/version checking/api keys
+##   logging - functions that enable consistent info/warn/debug/error messages server-wide
+##
+## Functions:
+##   game [OPTS]
+##     the game command is the core client entrypoint to server capability
+##     see `game help` for more detailed description of OPTS
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__GS_IMPORTS=(
   sources/cmdenv/cmdenv
+  sources/tput/tput
   functions/{docs,fetcher,messenger,logging}
 )
 
-for import in ${GS_IMPORTS[@]}; do
+for import in ${__GS_IMPORTS[@]}; do
   __gs_source_file $import
 done
+unset import __GS_IMPORTS
 
 game() {
   __gs_setdebug $1 || shift
@@ -60,6 +82,7 @@ game() {
     _logout_) : Log out of the server
       # It's kind of dumb to make this an option but it could also make sense later
       unset GS_API_KEY
+      __gs_infomsg "Successfully logged out $GS_USER!"
     ;;
     _update_) : Get latest version of game
       # Refresh self
@@ -72,7 +95,7 @@ game() {
         __gs_warnmsg "No new changes detected."
       fi
     ;;
-    _help_) : Print game help
+    _help_) : Open game help
       __gs_doccer
     ;;
     __)
@@ -84,4 +107,7 @@ game() {
   esac
 }
 __gs_source_template game-completion
+
+# Grab game launcher functions
+__gs_source_games
 

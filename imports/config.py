@@ -3,14 +3,15 @@ import sys
 
 from collections import namedtuple
 
+from imports import json
+
 Config = namedtuple('Config', ['host', 'port'])
 
 SERVER_CONFIG = "config.json"
 
 def load_config(filename):
     try:
-        with open(filename, 'r') as cfg_file:
-            cfg = json.load(cfg_file)
+        cfg = json.load_json(filename)
 
         for value in ["host", "port"]:
             if not cfg.get(value, None):
@@ -19,7 +20,4 @@ def load_config(filename):
         return Config(cfg.get("host"), cfg.get("port"))
     except FileNotFoundError:
         print(f"Error: could not find config file {filename}")
-        sys.exit(2)
-    except json.JSONDecodeError:
-        print(f"Error: could not read config file {filename}")
         sys.exit(2)

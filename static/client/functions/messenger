@@ -1,5 +1,39 @@
 #!/usr/bin/env bash
 
+## static/client/functions/messenger ##
+## Provides functions to interact with server
+##
+## Functions:
+##   __gs_json_content [KEY VAL [KEY VAL [...]]]
+##     function that formats input keys/vals as a json string
+##     calling with KEY1 VAL1 KEY2 VAL2 prints '"KEY1": "VAL1", "KEY2": "VAL2"'
+##   __gs_curl_post ROUTE [KEY VAL [KEY VAL [...]]]
+##     function that curls server with POST request to URL/ROUTE
+##     uses KEY/VAL pairs entered to call __gs_json_content and adds result to msg
+##     by default adds user/key/ver to every message
+##     this function is the preferred way to interact with the server
+##   __gs_parse_response JQCODE RESP [FILTEROFF]
+##     function that executes JQCODE on RESP string
+##     if FILTEROFF is populated, will parse responses without "valid": true
+##     calls `jq -r "JQCODE" <<<"RESP"` and prints result
+##   __gs_check_version RESP
+##     parses json RESP string for oldver key found when server api version is old
+##     prints warning and returns 1 if version is old
+##     server will not comply with requests if version is old
+##   __gs_response_valid RESP
+##     checks json RESP string for '"valid": true'
+##     server should include valid bool flag in every response
+##     returns 1 if valid is missing or not true
+##   __gs_request REQ [OPTS]
+##     function to handle common game requests/responses
+##     supported REQ values and their OPTS:
+##       _apikey_: gets api key from server if able
+##       _login_ PASSWD: logs in to server and handles possible errors
+##                       allows users to set password on first login
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
 __gs_json_content() {
   local arg
   local jsonContent=""
@@ -18,7 +52,7 @@ __gs_json_content() {
   echo "${jsonContent%, }"
 }
 
-# __gs_curl_post ROUTE KEY VAL [KEY VAL ...]
+# __gs_curl_post ROUTE [KEY VAL [KEY VAL [...]]]
 __gs_curl_post() {
   local route="$1"
   local jsonContent=""
@@ -35,7 +69,7 @@ __gs_curl_post() {
   printf "%s" "$response"
 }
 
-# __gs_parse_response JQCODE FILE
+# __gs_parse_response JQCODE RESP [FILTEROFF]
 __gs_parse_response() {
   local keyStr="$1"
   local jsonResp="$2"
@@ -52,6 +86,7 @@ __gs_check_version() {
   if jq -e ".oldver == true" <<<"$jsonResp" &>/dev/null; then
     __gs_errormsg "Old server api version detected."
     __gs_errormsg "Please run \`game update\` to get the latest server updates!"
+    return 1
   fi
 }
 

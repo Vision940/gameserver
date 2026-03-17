@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1",
+  "cmd_name": "tictactoe",
+  "full_name": "Tic Tac Toe",
+  "imports": [
+    "static/engine/term",
+    "static/engine/grid"
+  ]
+}

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+## dev/gensprite ##
+## gensprite takes advantage of the hard work of Dave Eddy and Ponali to take a
+##   .txt/.pal file and make a printable half-block emoji sprite entirely in bash
+##
+## Check out YSAP on youtube to find the videos breaking this down and check out
+##   github.com/bahamas10/bash-bmp/tree/dave-add-3d for more cool bash bmp stuff
+##
+## This script is dumb and meant to be run correctly by make
+## Run `make sprites <game>` at project toplevel to make all sprites relevant to <game>
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+gensprite_main() {
+  local spritefile="$1"
+  local bmptemp="${1%txt}bmp"
+  local palette="${1%txt}pal"
+  local defpalette="${palette%/*}/default.pal"
+  local spriteout="${1%txt}spr"
+
+  echo "creating sprite from '$spritefile'"
+
+  if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 3) )); then
+    # This is a fib - the ${ call; } syntax to speed up generation is the only reason for 5.3 and up
+    echo FATAL: need bash >= 5.3 to generate sprites 1>&2
+    return 1
+  fi
+
+  if [[ ! -f "$palette" && -f "$defpalette" ]]; then
+    palette="$defpalette"
+  elif [[ ! -f "$palette" ]]; then
+    echo FATAL: no available .pal file 1>&2
+    return 1
+  fi
+
+  echo "using palette '$palette'"
+
+  bash dev/lib/sprite-to-bmp -p "$palette" -o "$bmptemp" < "$spritefile" 2>/dev/null
+  bash dev/lib/view-bmp -i "$bmptemp" -a 2>/dev/null > "$spriteout"
+  echo "created sprite '$spriteout'"
+  \rm -v "$bmptemp"
+}
+
+gensprite_main "$@"
+

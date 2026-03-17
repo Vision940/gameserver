@@ -16,12 +16,17 @@ from imports import __version__ as SERVER_API_VER
 from imports import api # api key handling
 from imports import config # server config handling
 from imports import json # json data file handling
+from imports.games import (
+    bp as games_bp,
+    GAME_LIST
+)
 from imports.man import (
     bp as man_bp,
     MAN_DIR
 ) # man index and html/terminal pages
 
 app = Flask(__name__)
+app.register_blueprint(games_bp)
 app.register_blueprint(man_bp)
 
 # Add man pages to jinja template paths
@@ -50,6 +55,7 @@ def index():
 
     return Response(script, mimetype="text/plain")
 
+
 ##############
 # Completion #
 ##############
@@ -59,7 +65,7 @@ def completion(name):
     script = render_template(
         "client/completion",
         game=name,
-        game_list="" #TODO: generate game list from games dir - this needs to be sent joined
+        game_list=GAME_LIST
     )
 
     return Response(script, mimetype="text/plain")

@@ -1,24 +1,74 @@
 #!/usr/bin/env bash
 
-# Script to init a client
-# Users access the server capabilities by running:
-# source <(curl -sfL http://<hostname>:<port>/)
+## templates/client/init ##
+## Script to init a client to the gameserver
+##
+## Exports necessary env vars, checks for external deps, and sources game cmd
+##
+## Users access server capabilities with this script by running:
+##   source <(curl -sfL http://<hostname>:<port>/)
+##
+## Functions:
+##   __gs_source_file PATH ROUTE
+##     function to source file from server at URL/ROUTE/PATH
+##     default ROUTE is static/client
+##   __gs_deps_check
+##     function that runs one time on init source to check gameserver dependencies
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+# Check if user sourced
+# Only necessary in init bc game cmds handle all other code sourced from server
+if ! ( return 2>/dev/null ); then
+  echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] The game server init script is meant to be sourced." 1>&2
+  echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Please source this script to proceed." 1>&2
+  exit
+fi
+
+# This is functionized so nothing remains client-side if error on init
+__gs_deps_check() {
+  # Self destruct on first run
+  unset -f __gs_deps_check
+
+  local __GS_DEPS dep
+  __GS_DEPS=(
+    openssl
+    awk
+    sed
+    curl
+    jq
+    groff
+    less
+    tput
+    getopt
+  )
+
+  # Check for possibly missing dependencies
+  for dep in ${__GS_DEPS[@]}; do
+    if ! command -v $dep &>/dev/null; then
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] \`${dep}\` is a required dependency of the gameserver." 1>&2
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Please install the \`${dep}\` command with your package manager before sourcing." 1>&2
+      return 1
+    fi
+  done
+}
+__gs_deps_check || return
 
 export GS_HOST="{{ host }}"
 export GS_PORT="{{ port }}"
 export GS_URL="http://$GS_HOST:$GS_PORT"
 export GS_SERVER_API_VER="{{ server_ver }}"
 
-# __gs_source_template PATH ROUTE
+# __gs_source_file PATH ROUTE
 __gs_source_file() {
   local serverPath=${2:-static/client}
   declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Sourcing $1..."
   source <(curl -sfL "$GS_URL/$serverPath/$1")
 }
-# needs openssl awk bc? curl jq groff less
 
 # Prioritize id and whoami to avoid impersonation
-export GS_USER=$(id -u -n || whoami || echo $USER)
+export GS_USER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
 __gs_source_file game
 export GS_API_KEY=$(__gs_request _apikey_)
 

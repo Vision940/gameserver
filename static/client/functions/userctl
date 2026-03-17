@@ -1,7 +1,28 @@
 #!/usr/bin/env bash
 
-# File's functions self destruct mostly just for fun
-# This does somewhat prevent users from finding set passwd and trying to run it though
+## static/client/functions/userctl ##
+## Provides functions to handle user passwords
+##
+## Not sourced by default in game
+## Instead, intended use is to source this for password functions and then
+##   run cleanup to unset the relevant functions
+## File's functions self destruct mostly just for fun, but it does somewhat
+##   prevent users from finding the set passwd fxn and trying to run it
+##
+## Functions:
+##   __gs_userctl_cleanup
+##     function to unset all functions in userctl
+##     calls __gs_module_selfdestruct to achieve this
+##   __gs_passwd_prompt
+##     function to prompt users to enter their password
+##     prints out sha256 hashed version of user input to send to server for verification
+##   __gs_set_passwd HASH
+##     function to set user's password server-side
+##     input HASH is hashed password read by prompt fxn
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
 __gs_userctl_cleanup() {
   __gs_module_selfdestruct functions/userctl
 }

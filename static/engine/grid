@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+
+## static/engine/grid ##
+## This file contains generic grid drawing / keyboard handling for games
+##   that use grid-based systems.
+##
+## Functions:
+##   __gs_grid_renderer
+##     function to render grid from PARENT/gridbox/*.spr sprites
+##     opts:
+##       -w GRID_WIDTH (boxes, required)
+##       -h GRID_HEIGHT (boxes, required, after -w)
+##       -i BOX_WIDTH (columns, required)
+##       -e BOX_HEIGHT (lines, required)
+##       -x START_X (columns, required if no -c)
+##       -y START_Y (lines, required if no -c)
+##       -c (center drawn grid instead of providing starting x/y)
+##       -d (draw divider w gridbox/divider.spr if -i/e vals > gridbox spr sizes)
+##       -p PARENT (required, game name to find sprite files)
+##       -g GRIDTYPE=[boxpos|simple] (default simple)
+##       -o OVERRIDE -o OVERRIDE ...
+##            (after -w and -h, format x,y:SPRITE where SPRITE is * in gridbox/*.spr)
+##   __gs_grid_keyboard
+##     function to handle grid keyboard events
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+#TODO: This grid fxn is proof of concept, need to trim down and make more modular
+# Use globals set when game played to set parent/cache dir and whatnot
+__gs_grid_renderer() {
+  local grid_w grid_h box_w box_h
+  local divider=false
+  local start_x start_y
+  local gridtype parent
+  local centered=false
+  local def_spritefile
+
+  # Grid types (and expected sprites) are as follows:
+  # boxpos - gridbox/{tl,tm,tr,ml,mm,mr,bl,bm,br}.spr
+  # oddeven - gridbox/{odd,even}.spr
+  # indices - gridbox/{default,11,12,22,31,...}.spr
+  # simple - gridbox/default.spr
+  #TODO: only boxpos and simple implemented right now
+  local gridtype=simple # defaults to simple grid
+
+  #TODO: Use cache dir
+  if [[ -f "gridbox/default.spr" ]]; then
+    def_spritefile="gridbox/default.spr"
+  else
+    def_spritefile="$(find -type f -name "gridbox/*.spr" -print -quit)"
+  fi
+  __gs_debugmsg "Using $def_spritefile as default"
+
+  local gb_size_w=$(wc -L < "${def_spritefile%.spr}.txt")
+  local gb_size_h=$(wc -l < "${def_spritefile%.spr}.txt")
+
+  #TODO: Sprite validation can maybe be a separate call on startup
+  local file
+  for file in gridbox/*.spr; do
+    [[ "$file" == "gridbox/divider.spr" ]] && continue
+    if (( gb_size_h != $(wc -l < "${file%.spr}.txt") || gb_size_w != $(wc -L < "${file%.spr}.txt") )); then
+      __gs_errormsg "$file has different proportions than expected ${gb_size_w}x$gb_size_h from $def_spritefile"
+      return 1
+    fi
+  done
+
+  # Parse args
+  local opt OPTIND OPTARG
+  while getopts 'w:h:i:dcg:e:p:o:x:y:' opt; do
+    case "$opt" in
+      w) grid_w=$OPTARG;;
+      h)
+        [[ -z "$grid_w" ]] && {
+          __gs_errormsg "-w WIDTH needs to be specified before -h"
+          return 1
+        }
+        grid_h=$OPTARG
+        local x y
+        for ((y = 1; y <= grid_h; y++)); do
+          for ((x = 1; x <= grid_w; x++)); do
+            local override$x${y}=
+          done
+        done
+      ;;
+      i) box_w=$OPTARG;;
+      e) box_h=$OPTARG;;
+      d) divider=true;;
+      c) centered=true;;
+      x) start_x=$OPTARG;;
+      y) start_y=$OPTARG;;
+      g) gridtype=$OPTARG;;
+      p) parent=$OPTARG;;
+      o) # expects x,y:sprite
+        [[ -z "$grid_w" ]] && {
+          __gs_errormsg "-w WIDTH and -h HEIGHT need to be specified before -o"
+          return 1
+        }
+        local coords=${OPTARG%:*}
+        local sel_x=${coords%,*} sel_y=${coords#*,}
+        local spr="${OPTARG#*:}"
+        (( sel_x > grid_w || sel_y > grid_h || sel_x <= 0 || sel_y <= 0 )) && {
+          __gs_errormsg "${sel_x},${sel_y} is not a valid grid square to override"
+          return 1
+        }
+        local override${sel_x}${sel_y}="${spr:-default}"
+        unset sel_x sel_y coords spr
+      ;;
+      *) __gs_errormsg "Unrecognized option to grid init"; return 1;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  # Validate call
+  for opt in grid_w grid_h box_w box_h parent; do
+    [[ -z "${!opt}" ]] && {
+      __gs_errormsg "$opt is a required parameter to grid init"
+      return 1
+    }
+  done
+  if ! $centered && [[ -z "$start_x" || -z "$start_y" ]]; then
+    __gs_errormsg "Unknown starting grid position"
+    return 1
+  fi
+  if [[ ! " boxpos simple " =~ " $gridtype " ]]; then
+    __gs_errormsg "Unsupported grid type passed to grid init"
+    return 1
+  fi
+
+  shopt -s checkwinsize
+  (:) # this should ensure LINES and COLUMNS are set
+  [[ -z $COLUMNS ]] && COLUMNS=$(tput cols)
+  [[ -z $LINES ]] && LINES=$(tput lines)
+
+  #TODO: Filepath stuff
+  if $divider && [[ ! -f "gridbox/divider.spr" ]]; then
+    __gs_errormsg "divider arg specified but no divider sprite file found"
+    return 1
+  fi
+
+  local divider_w=0
+  $divider && divider_w=$(( box_w - gb_size_w ))
+  local divider_h=0
+  $divider && divider_h=$(( box_h - (gb_size_h / 2) ))
+
+  local size_x=$(( grid_w * box_w - $divider_w )) # subtract divider once bc not on last edge
+  local size_y=$(( grid_h * box_h - $divider_h ))
+
+  if $centered; then
+    start_x=$(( COLUMNS / 2 - size_x / 2 ))
+    start_y=$(( LINES / 2 - size_y / 2 ))
+  fi
+
+  if (( size_x + start_x > COLUMNS || size_y + start_y > LINES )); then
+    __gs_errormsg "Terminal too small for grid (${COLUMNS}x$LINES)"
+    __gs_errormsg "Need at least ($((size_x + start_x))x$((size_y + start_y)))"
+    return 1
+  fi
+
+  # Assert that grid w == h if boxpos
+  if (( grid_h != grid_w )) && [[ "$gridtype" == "boxpos" ]]; then
+    __gs_errormsg "Box width and height must match for boxpos grid"
+    return 1
+  fi
+
+  #TODO: actually handle cleanup and do this before call to print grid in calling fxn
+  tput smcup
+  tput civis
+  stty -echo 2>/dev/null
+
+  # Print grid
+  while ! read -rsn1 -t .01; do
+    local grid_x grid_y
+    for ((grid_y = 1; grid_y <= grid_h; grid_y++)); do
+      for ((grid_x = 1; grid_x <= grid_w; grid_x++)); do
+        case $gridtype in
+          boxpos)
+            case $grid_x$grid_y in
+              11) spritefile=tl ;;
+              1${grid_w}) spritefile=bl ;;
+              1*) spritefile=ml ;;
+              ${grid_h}1) spritefile=tr ;;
+              ${grid_h}${grid_w}) spritefile=br ;;
+              ${grid_h}*) spritefile=mr ;;
+              *1) spritefile=tm ;;
+              *${grid_w}) spritefile=bm ;;
+              *) spritefile=mm ;;
+            esac
+          ;;
+          simple)
+            spritefile=default
+          ;;
+        esac
+
+        local overrideVar=override${grid_x}${grid_y}
+        if [[ -n "${!overrideVar}" ]]; then
+          spritefile="${!overrideVar}"
+        fi
+
+        spritefile="gridbox/$spritefile.spr"
+        if [[ ! -f "$spritefile" ]]; then
+          spritefile="$def_spritefile"
+        fi
+
+        local lines=0
+        local divider_spr="$(cat gridbox/divider.spr)"
+        divider_spr="${divider_spr//$'[\t\n ]'}"
+        while read line; do
+          tput cup $(( (grid_y - 1) * box_h + start_y + lines )) $(( (grid_x - 1) * box_w + start_x ))
+          printf "%s" "$line"
+          if $divider && (( grid_x < grid_w )); then
+            for (( i=0; i < divider_w; i++ )); do
+              printf "%s" "$divider_spr"
+            done
+          fi
+          tput sgr0
+          ((lines++))
+        done < "$spritefile"
+      done
+      if $divider && (( grid_y < grid_h )); then
+        local i j
+        for (( j=0; j < divider_h; j++ )); do
+          tput cup $(( (grid_y - 1) * box_h + start_y + lines + j )) $start_x
+          for (( i=0; i < size_x; i++ )); do
+            printf "%s" "$divider_spr"
+          done
+        done
+        tput sgr0
+      fi
+    done
+  done
+
+  tput cnorm
+  tput rmcup
+  stty echo 2>/dev/null
+}
+
