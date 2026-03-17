@@ -15,10 +15,10 @@ __gs_source_file() {
   declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Sourcing $1..."
   source <(curl -sfL "$GS_URL/$serverPath/$1")
 }
-# needs openssl awk bc? curl jq groff less
+#TODO: needs openssl awk bc? curl jq groff less getopt stty
 
 # Prioritize id and whoami to avoid impersonation
-export GS_USER=$(id -u -n || whoami || echo $USER)
+export GS_USER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
 __gs_source_file game
 export GS_API_KEY=$(__gs_request _apikey_)
 

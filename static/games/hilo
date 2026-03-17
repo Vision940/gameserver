@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+__gs_hilo_main() {
+  echo running main
+}
+

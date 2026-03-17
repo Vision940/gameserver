@@ -2,9 +2,11 @@
 
 GS_IMPORTS=(
   sources/cmdenv/cmdenv
+  sources/tput/tput
   functions/{docs,fetcher,messenger,logging}
 )
 
+local import
 for import in ${GS_IMPORTS[@]}; do
   __gs_source_file $import
 done
@@ -60,6 +62,7 @@ game() {
     _logout_) : Log out of the server
       # It's kind of dumb to make this an option but it could also make sense later
       unset GS_API_KEY
+      __gs_infomsg "Successfully logged out $GS_USER!"
     ;;
     _update_) : Get latest version of game
       # Refresh self
@@ -84,4 +87,7 @@ game() {
   esac
 }
 __gs_source_template game-completion
+
+# Grab game launcher functions
+__gs_source_games
 

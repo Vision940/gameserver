@@ -8,6 +8,10 @@ __gs_source_template() {
   __gs_source_file "$1" templates
 }
 
+__gs_source_games() {
+  __gs_source_file "$1" games
+}
+
 # __gs_module_selfdestruct MODULE ROUTE
 __gs_module_selfdestruct() {
   local serverPath=${2:-static/client}

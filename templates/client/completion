@@ -130,10 +130,8 @@ __gs_fmt_comp_desc() {
 
 # Responds with available games when completing load option
 __gs_game_comp() {
-  {% raw %}
-  if (( ${#COMP_WORDS[@]} == 3 )) && [[ "$3" == "load" ]]; then
-  {% endraw %}
-    COMPREPLY=($(compgen -W "{{ game_list }}" -- ${2}))
+  if (( COMP_CWORD == 2 )) && [[ "$3" == "load" ]]; then
+    COMPREPLY=($(compgen -W "{{ game_list | join(' ') }}" -- ${2}))
     return 0
   fi
   return 1

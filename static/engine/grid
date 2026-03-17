@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+#TODO: This grid fxn is proof of concept, need to trim down and make more modular
+# Use globals set when game played to set parent/cache dir and whatnot
+__gs_grid() {
+  local grid_w grid_h box_w box_h
+  local divider=false
+  local start_x start_y
+  local gridtype parent
+  local centered=false
+
+  # Grid types (and expected sprites) are as follows:
+  # boxpos - gridbox-{tl,tm,tr,ml,mm,mr,bl,bm,br}.spr
+  # oddeven - gridbox-{odd,even}.spr
+  # indices - gridbox-{default,11,12,22,31,...}.spr
+  #TODO: only boxbos implemented right now
+  local gridtype=boxpos
+
+  # Parse args
+  local opt OPTIND OPTARG
+  while getopts 'w:h:i:e:dcg:p:' opt; do
+    case "$opt" in
+      w) grid_w=$OPTARG;;
+      h) grid_h=$OPTARG;;
+      i) box_w=$OPTARG;;
+      e) box_h=$OPTARG;;
+      d) divider=true;;
+      c) centered=true;;
+      x) start_x=$OPTARG;;
+      y) start_y=$OPTARG;;
+      g) gridtype=$OPTARG;;
+      p) parent=$OPTARG;;
+			*) __gs_errormsg "Unrecognized option to grid init"; return 1;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  # Validate call
+  for opt in grid_w grid_h box_w box_h parent; do
+    [[ -z "${!opt}" ]] && {
+      __gs_errormsg "$opt is a required parameter to grid init"
+      return 1
+    }
+  done
+  if ! $centered && [[ -z "$start_x" || -z "$start_y" ]]; then
+    __gs_errormsg "Unknown starting grid position"
+    return 1
+  fi
+  if [[ ! " boxpos " =~ " $gridtype " ]]; then
+    __gs_errormsg "Unsupported grid type passed to grid init"
+    return 1
+  fi
+
+  shopt -s checkwinsize
+  (:) # this should ensure LINES and COLUMNS are set
+  [[ -z $COLUMNS ]] && COLUMNS=$(tput cols)
+  [[ -z $LINES ]] && LINES=$(tput lines)
+
+  #TODO: Actually implement divider
+  local divider_w=0
+  $divider && divider_w=$(( 2 * (grid_w - 1) ))
+  local divider_h=0
+  $divider && divider_h=$(( grid_h - 1 ))
+
+  local size_x=$(( grid_w * box_w + divider_w ))
+  local size_y=$(( grid_h * box_h + divider_h ))
+
+  if $centered; then
+    start_x=$(( COLUMNS / 2 - size_x / 2 ))
+    start_y=$(( LINES / 2 - size_y / 2 ))
+  fi
+
+  if (( size_x + start_x > COLUMNS - 1 || size_y + start_y > LINES - 1 )); then
+    __gs_errormsg "Terminal too small for grid (${COLUMNS}x$LINES)"
+    __gs_errormsg "Need at least ($((size_x))x$((size_y))) from starting point"
+  fi
+
+  # Assert that grid w == h if boxpos
+  if (( grid_h != grid_w )) && [[ "$gridtype" == "boxpos" ]]; then
+    __gs_errormsg "Box width and height must match for boxpos grid"
+    return 1
+  fi
+
+  #TODO: actually handle cleanup and do this before call to print grid
+  tput smcup
+  tput civis
+  stty -echo
+
+  #TODO: Use cache dir here
+  #TODO: call the loops grid_x and grid_y
+  # Print grid
+  local x y
+  for ((x = 1; x <= grid_w; x++)); do
+    for ((y = 1; y <= grid_h; y++)); do
+      case $gridtype in
+        boxpos)
+          local spritefile
+          case $x$y in
+            11) spritefile=tl ;;
+            1${grid_w}) spritefile=bl ;;
+            1*) spritefile=ml ;;
+            ${grid_h}1) spritefile=tr ;;
+            ${grid_h}${grid_w}) spritefile=br ;;
+            ${grid_h}*) spritefile=mr ;;
+            *1) spritefile=tm ;;
+            *${grid_w}) spritefile=bm ;;
+            *) spritefile=mm ;;
+          esac
+        ;;
+      esac
+
+      #TODO: Check that spr file is same chars/len as box_x and box_y
+      spritefile="gridbox-$spritefile.spr"
+      if [[ ! -f "$spritefile" ]]; then
+        if [[ -f "${spritefile%/*}/default.spr" ]]; then
+          spritefile="${spritefile%/*}/default.spr"
+        else
+          __gs_errormsg "Sprite $spritefile not found and no default specified"
+          return 1
+        fi
+      fi
+
+      local lines=0
+      while read line; do
+        tput cup $(( (y - 1) * box_h + start_y + lines)) $(( (x - 1) * box_w + start_x ))
+        printf "%s" "$line"
+        ((lines++))
+      done < "$spritefile"
+    done
+  done
+
+  read -rsn1
+
+	tput cnorm
+	tput rmcup
+	stty echo
+}
+

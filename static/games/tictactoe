@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+__gs_tictactoe_main() {
+  echo running main
+}
+

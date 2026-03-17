@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+GS_{{ game.cmd_name | upper }}_VERSION={{ game.version }}
+GS_{{ game.cmd_name | upper }}_IMPORTS=(
+  games/{{ game.cmd_name }}
+  {{ game.imports | join('\n') }}
+)
+
+local import
+for import in ${GS_{{ game.cmd_name | upper }}_IMPORTS[@]}; do
+  __gs_source_file $import
+done
+
+{{ game.cmd_name }}() {
+  #TODO: add getopt parsing for --quiet, --help, etc
+  case _$1_ in
+    _play_) : Play the game
+      echo I\'m playing {{ game.full_name }}!
+      __gs_{{ game.cmd_name }}_main
+    ;;
+    _help_) : Print {{ game.cmd_name }} help
+      echo To be implemented!
+    ;;
+  esac
+}
+__gs_source_template {{ game.cmd_name }}-completion
+

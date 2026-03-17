@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+#
+# Reads sprite data from stdin and outputs a bitmap version
+# with the given palette.
+#
+# Author: Dave Eddy <dave@daveeddy.com>
+# Date: July 29, 2025
+# License: MIT
+
+. ./dev/lib/bmp || exit
+
+declare -A PALETTE
+
+read -d '' -r USAGE <<- EOF
+Usage: sprite-to-bmp -p <palette> [-o out.bmp]
+
+Convert sprite data from txt (read as stdin) to a BMP image
+
+Options
+  -h            Print this message and exit.
+  -p <palette>  [required] Palette text file to read.
+  -o <out>      Output file path, defaults to out.bmp.
+EOF
+
+debug() {
+	echo '[debug]' "$@" >&2
+}
+
+fatal() {
+	echo '[fatal]' "$@" >&2
+	exit 1
+}
+
+make-bmp() {
+	local SPRITE
+	mapfile -t SPRITE
+
+	local width=${#SPRITE[0]}
+	local height=${#SPRITE[@]}
+
+	bmp-header "$width" "$height"
+	local padding=$REPLY
+
+	local r g b y x c
+	for ((y = 0; y < height; y++)); do
+		for ((x = 0; x < width; x++)); do
+			c=${SPRITE[height - y - 1]}
+			c=${c:x:1}
+
+			read -r r g b <<< "${PALETTE[$c]}"
+			bmp-rgb "$r" "$g" "$b"
+		done
+		debug "handled row $((y + 1))/$height"
+		bmp-pad "$padding"
+	done
+}
+
+hex2rgb() {
+	local hex=${1#\#}
+
+	local r=$((16#${hex:0:2}))
+	local g=$((16#${hex:2:2}))
+	local b=$((16#${hex:4:2}))
+
+	echo "$r $g $b"
+}
+
+load-palette() {
+	local file=$1
+
+	local lines
+	mapfile -t lines < "$file" || fatal "failed to read $file"
+
+	local line
+	for line in "${lines[@]}"; do
+		local c hex
+		c=${line:0:1}
+		hex=${line:2}
+
+		PALETTE[$c]=$(hex2rgb "$hex")
+	done
+}
+
+main() {
+	local output=out.bmp
+
+	local palette
+	local OPTIND OPTARG opt
+	while getopts 'hp:o:' opt; do
+		case "$opt" in
+			h) echo "$USAGE"; exit 0;;
+			o) output=$OPTARG;;
+			p) palette=$OPTARG;;
+			*) echo "$USAGE" >&2; exit 1;;
+		esac
+	done
+
+	if [[ -z $palette ]]; then
+		usage >&2
+		exit 1
+	fi
+
+	load-palette "$palette"
+
+	make-bmp > "$output" || fatal "failed to generate $output"
+	echo "generated image '$output'"
+}
+
+main "$@"

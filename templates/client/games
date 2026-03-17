@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+GS_GAME_LIST="{{ game_list | join(' ') }}"
+
+{% for game in game_list %}
+{{ game }}() {
+  __gs_infomsg "Loading latest version of {{ game }} from server..."
+  unset -f {{ game }} # Unset placeholder function (this)
+  __gs_source_games games/{{ game }} # Set up real function
+  {{ game }} $@
+}
+{% endfor %}
+
