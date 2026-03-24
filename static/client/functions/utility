@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+## static/client/functions/utility ##
+## Provides utility functions for other functions
+##
+## Functions:
+##   __gs_required_args [-nd] [ARG ARG ...]
+##     function to check if ARG names are set in env
+##     opts:
+##       -n  ARG is an env var that should be set
+##       -d  just print as debug if ARG unset
+##     otherwise, prints error saying required arg ARG not set in fxn
+##     returns non-zero on first ARG unset
+##   __gs_trap_check SIGNAL
+##     function to check if SIGNAL is a trap in the current env
+##     returns non-zero if SIGNAL is trapped
+##   __gs_bash_vercheck VERSION="MAJOR.MINOR"
+##     function to check if current bash version is >= VERSION
+##     returns 0 if >= VERSION
+##     this is here as a preliminary check to avoid weird term states
+##     still expect to catch misisng newer bash features with ||
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_required_args() {
+  local isArg=true
+  local logger=__gs_errormsg
+  local opt OPTIND OPTARG
+  while getopts 'nd' opt; do
+    case "$opt" in
+      d) logger=__gs_debugmsg;;
+      n) isArg=false;;
+      *) __gs_errormsg "Unrecognized option to required args"; return 2;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  local arg
+  for arg in $@; do
+    __gs_debugmsg "Checking $($isArg && echo "required arg" || echo "env var") $arg to ${FUNCNAME[1]} has value - \"${!arg}\"" 3
+    [[ -z "${!arg}" ]] && {
+      $logger "Missing $($isArg && echo "required arg" || echo "env var") $arg to ${FUNCNAME[1]}"
+      return 2
+    }
+  done
+
+  return 0
+}
+
+__gs_trap_check() {
+  local trapTxt="$(trap -p $1)"
+
+  [[ "$trapTxt" =~ ^trap\ --\ \'(.*)\'\ $1$ ]] && {
+    __gs_errormsg "Attempted to trap $1 when signal already trapped to '${BASH_REMATCH[1]}'"
+    return 1
+  }
+
+  return 0
+}
+
+__gs_bash_ver_check() {
+  local version="$1"
+  __gs_required_args version
+
+  [[ "$version" =~ ^[0-9]"."[0-9]$ ]] || {
+    __gs_errormsg "Unexpected version string format passed to $FUNCNAME"
+    return 2
+  }
+
+  local major=${version%\.*}
+  local minor=${version#*\.}
+
+  # Return 0 if >= version passed in
+  (( BASH_VERSINFO[0] > $major || (BASH_VERSINFO[0] == $major && BASH_VERSINFO[1] >= $minor) ))
+}
+

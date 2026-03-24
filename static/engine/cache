@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+## static/engine/cache ##
+## This file contains cache handler functions for game runtime
+##
+## Games need files for FIFO, sprites, etc.
+## This file allows init/deinit of a cache for all these things during runtime
+##
+## Functions:
+##   __gs_cache (init|deinit|load-sprites GAME)
+##     function to init/deinit cache and load sprites for a game
+##     actions:
+##       init - create cache dir in /tmp and set GS_CACHE var in env to location
+##       deinit - erase GS_CACHE dir from /tmp along with all contents
+##       load-sprites GAME - loads the contents of sprites/default and sprites/GAME
+##                             to cache
+##                           GAME sprites will overwrite defaults if they exist
+##   __gs_cache_log (init|deinit)
+##     function to redirect logs/stderr while in the alt screen
+##     actions:
+##       init: re-routes stderr to a cache file assigned to GS_CACHE_LOG in env
+##       deinit: removes and prints contents of GS_CACHE_LOG and resets stderr to tty
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_cache() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      local ttyOut="$(tty)"
+      export GS_CACHE="/tmp/gameserver.${ttyOut//\//.}.$$.$GS_USER"
+      [[ -d "$GS_CACHE" ]] && {
+        __gs_errormsg "$GS_CACHE is somehow already a directory - please remove it to continue"
+        unset GS_CACHE
+        return 1
+      }
+      command mkdir -p $GS_CACHE
+    ;;
+    _deinit_)
+      __gs_required_args -nd GS_CACHE || return 1
+      command rm -rf $GS_CACHE 2>/dev/null
+      unset GS_CACHE
+    ;;
+    #TODO: also load sprites from sprites/default before so that game sprites overwrite
+    #TODO: default server sprite route
+    _load-sprites_)
+      local game="$2"
+      __gs_required_args game || return 2
+      __gs_required_args -n GS_URL GS_CACHE || return 1
+
+      local spriteDir="$GS_CACHE/sprites"
+      if [[ -d "$spriteDir" ]]; then
+        __gs_debugmsg "Removing existing $spriteDir..." 2
+        command rm -rf "$spriteDir"
+      fi
+      command mkdir -p "$spriteDir"
+
+      # Retrieve game sprites from server into cache
+      local spriteGz="${GS_CACHE}/${game}-sprites.tar.gz"
+      curl -sfL "${GS_URL}/games/${game}-sprites.tar.gz" -o "$spriteGz" 2>/dev/null || {
+        __gs_errormsg "Could not retrieve $game sprites from server"
+        return 1
+      }
+
+      # Unzip game sprites to cache/sprites
+      tar -xzf "$spriteGz" -C "$spriteDir" 2>/dev/null || {
+        __gs_errormsg "Could not unzip sprites from server"
+        return 1
+      }
+      command rm -f "$spriteGz"
+
+      return 0
+    ;;
+  esac
+}
+
+__gs_cache_log() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      __gs_required_args -n GS_CACHE || return 1
+      if [[ -d "$GS_CACHE" ]]; then
+        export GS_CACHE_LOG="$(mktemp -p $GS_CACHE cachelog.$$.XXX)"
+        command touch "$GS_CACHE_LOG" 2>/dev/null
+        exec 2>> "$GS_CACHE_LOG"
+      else
+        __gs_errormsg "Could not init cache log - GS_CACHE is not a valid directory"
+        return 1
+      fi
+    ;;
+    _deinit_)
+      __gs_required_args -nd GS_CACHE GS_CACHE_LOG || return 1
+      if [[ -f "$GS_CACHE_LOG" ]]; then
+        cat "$GS_CACHE_LOG"
+        command rm -f "$GS_CACHE_LOG" 2>/dev/null
+      fi
+      exec 2<> $(tty)
+      unset GS_CACHE_LOG
+    ;;
+  esac
+}
+

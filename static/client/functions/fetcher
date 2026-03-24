@@ -33,5 +33,3 @@ __gs_module_selfdestruct() {
   unset -f $fxns
 }
 
-#TODO: __gs_load_game_lib that loads a game's libraries/sprite files to /tmp cache
-

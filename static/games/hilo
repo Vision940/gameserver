@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 
+#TODO: docs
+
 __gs_hilo_main() {
-  echo running main
+  __gs_hilo_common init || return 1
+  while __gs_fd is-open $GS_HILO_EVENTS_FD; do
+    __gs_keyboard read || return 0
+  done
+}
+
+__gs_hilo_exit() {
+  # Only run if return of $1 function
+  [[ "${FUNCNAME[1]}" == "$1" ]] || return 1
+
+  __gs_hilo_common deinit
+  return 0
 }
 

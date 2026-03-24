@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+__gs_{{ game.cmd_name }}_term() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      local fxnPrefix="__gs_{{ game.cmd_name }}"
+
+      declare -f ${fxnPrefix}_exit &>/dev/null || {
+        __gs_errormsg "${fxnPrefix}_exit doesn't exist when calling $FUNCNAME"
+        return 1
+      }
+      [[ " ${fxnPrefix}_main ${fxnPrefix}_common " =~ " ${FUNCNAME[1]} " ]] || {
+        __gs_errormsg "$FUNCNAME needs to be called from ${fxnPrefix}_(main|common)"
+        return 1
+      }
+
+      # Set up required RETURN trap
+      __gs_trap_check RETURN || return 1
+      local trapTxt="__gs_term deinit ${fxnPrefix}_main; ${fxnPrefix}_exit ${fxnPrefix}_main && trap - RETURN"
+      trap "$trapTxt" RETURN
+
+      __gs_term init "$(trap -p RETURN)" ${fxnPrefix}_exit || {
+        __gs_errormsg "Could not init term"
+        return 1
+      }
+    ;;
+  esac
+}
+

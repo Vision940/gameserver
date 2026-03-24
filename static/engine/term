@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+## static/engine/term ##
+## This file contains generalized terminal init/de-init functions for
+##   games to use to enter the alt screen and draw title screens
+##
+## Functions:
+##   __gs_term_init "TRAP"
+##     function to init terminal into alt screen
+##     requires TRAP output of `trap -p RETURN` as first arg
+##     checks if __gs_term deinit is trapped to RETURN before proceeding
+##     sets LINES and COLUMNS env vars for game function
+##   __gs_term deinit
+##     function to clean up / exit alt screen on main exit
+##     expects to be called from RETURN trap
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_term() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      local retTrap="$2"
+      local winchExit="$3"
+
+      # Make sure cache inited
+      __gs_required_args -n GS_CACHE || return 1
+
+      # Warn if not called from template
+      [[ ${FUNCNAME[1]} =~ __gs_.*_term || "$4" == "noparent" ]] || {
+        __gs_warnmsg "\`__gs_term init\` is best run from the __gs_{{ game.cmd_name }}_term template in templates/engine/game-utils"
+        __gs_warnmsg "Run with \$4 set to noparent to suppress this message"
+      }
+
+      # Ensure running interactively
+      [[ ! -t 1 ]] && {
+        __gs_errormsg "stdout is not to a terminal!" fatal
+        __gs_cache deinit
+        return 1
+      }
+
+      # Ensure deinit set up
+      [[ ! "$retTrap" =~ "trap -- '__gs_term deinit ".*" && trap - RETURN' RETURN" ]] && {
+        __gs_errormsg "$FUNCNAME requires deinit RETURN trap before call - refer to $FUNCNAME for more info"
+        __gs_cache deinit
+        return 1
+      }
+
+      __gs_trap_check SIGWINCH || return 1
+      trap "__gs_winch_handler $winchExit" WINCH
+
+      shopt -s checkwinsize
+      (:) # this should ensure LINES and COLUMNS are set
+      [[ -z $COLUMNS ]] && COLUMNS=$(tput cols)
+      [[ -z $LINES ]] && LINES=$(tput lines)
+
+      [[ -z $COLUMNS || -z $LINES ]] && {
+        __gs_errormsg "Unable to determine terminal size"
+        return 1
+      }
+
+      tput smcup
+      tput civis
+
+      export GS_OLD_STTY=$(stty -g)
+      stty -echo -icanon -isig -ixon -ixoff min 0 time 1
+
+      __gs_cache_log init
+    ;;
+    _deinit_)
+      # Only run if return of $1 function
+      [[ "${FUNCNAME[1]}" == "$2" ]] || return 1
+
+      [[ "$(trap -p WINCH)" =~ __gs_winch_handler ]] && trap - WINCH
+
+      tput rmcup
+      tput cnorm
+      tput sgr0
+
+      stty "$GS_OLD_STTY"
+      unset GS_OLD_STTY
+
+      __gs_cache_log deinit
+    ;;
+  esac
+}
+
+#TODO: doc this and make sure $1 passed in and callable
+#TODO: update init docs too
+__gs_winch_handler() {
+  __gs_errormsg "Terminal resized during game" fatal
+  __gs_term deinit
+  $1 __gs_winch_handler # Run exit fxn
+}
+

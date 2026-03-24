@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 
+#TODO: documentation
+#TODO: template route that spits out grunt work for dev main setup - maybe dev blueprint route?
+#TODO: readme in dev about creating a game
+
 __gs_tictactoe_main() {
-  echo running main
+  __gs_tictactoe_common init || return 1
+
+  #TODO: configurable title screen
+  #TODO: add event handlers
+
+  #local second=0
+  #TODO: raise events from keyboard input subscriptions and handle/render from there in main loop
+
+  echo Running until q or ^C...
+  while __gs_fd is-open $GS_TICTACTOE_EVENTS_FD; do
+    # Run until q or ^C entered
+    __gs_keyboard read || return 0
+
+    #echo loops running: $second
+    #trap
+    #ls /proc/$$/fd
+    #((second++))
+  done
+}
+
+__gs_tictactoe_exit() {
+  # Only run if return of $1 function
+  [[ "${FUNCNAME[1]}" == "$1" ]] || return 1
+
+  __gs_tictactoe_common deinit
+  return 0
 }
 

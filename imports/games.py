@@ -1,45 +1,32 @@
 import os
+import tarfile
+import tempfile
 
 from flask import (
     abort,
+    after_this_request,
     current_app,
     Blueprint,
     render_template,
-    Response
+    Response,
+    send_file
 )
 from jinja2 import (
     TemplateNotFound
 )
 
 from imports import config
-from imports import json
+from imports.game_objs import Game
 
+
+## Globals ##
 CONFIG = config.load_config(config.SERVER_CONFIG)
 GAME_LIST = [file for file in os.listdir('static/games') if os.path.isfile(f'static/games/{file}')]
 
 bp = Blueprint("games", __name__, url_prefix="/games")
 
-class Imports:
-    def __init__(self, imports: list):
-        self.templates = []
-        self.statics = []
-        for imp in imports:
-            if imp.startswith("templates/"):
-                self.templates.append(imp.lstrip("templates/"))
-            elif imp.startswith("static/"):
-                self.statics.append(imp.lstrip("static/"))
-            else:
-                current_app.logger.error("Import config path doesn't start with valid route")
 
-#TODO: support grid option to json
-class Game:
-    def __init__(self, json_config):
-        cfg = json.load_json(json_config)
-        self.version = cfg.get("version", "")
-        self.cmd_name = cfg.get("cmd_name", "")
-        self.full_name = cfg.get("full_name", "")
-        self.imports = Imports(cfg.get("imports", []))
-
+## Functions ##
 @bp.route('/')
 def games():
     try:
@@ -52,6 +39,7 @@ def games():
 
     return Response(script, mimetype="text/plain")
 
+
 @bp.route('/<name>')
 def game_name(name):
     if name not in GAME_LIST:
@@ -60,11 +48,75 @@ def game_name(name):
     game_obj = Game(f'static/games/configs/{name}.json')
     try:
         script = render_template(
-            "engine/base-game",
+            "engine/game-base",
             game = game_obj
         )
     except TemplateNotFound:
         abort(404)
 
     return Response(script, mimetype="text/plain")
+
+
+@bp.route('/<name>-utils')
+def game_utils(name):
+    if name not in GAME_LIST:
+        abort(404)
+
+    game_obj = Game(f'static/games/configs/{name}.json')
+    try:
+        script = render_template(
+            "engine/game-utils",
+            game = game_obj
+        )
+    except TemplateNotFound:
+        abort(404)
+
+    return Response(script, mimetype="text/plain")
+
+
+@bp.route('/<name>-common')
+def game_common(name):
+    if name not in GAME_LIST:
+        abort(404)
+
+    game_obj = Game(f'static/games/configs/{name}.json')
+    try:
+        script = render_template(
+            "engine/game-common",
+            game = game_obj
+        )
+    except TemplateNotFound:
+        abort(404)
+
+    return Response(script, mimetype="text/plain")
+
+
+@bp.route("/<name>-sprites.tar.gz")
+def get_sprites(name):
+    # Check that sprite dir exists
+    sprite_dir=f'static/games/sprites/{name}'
+    if not os.path.isdir(sprite_dir):
+        abort(404, "Directory not found")
+
+    # Get tmp path for sprite .tar.gz
+    fd, tmp_path = tempfile.mkstemp(suffix=".tar.gz")
+    os.close(fd)
+
+    # gzip sprites
+    with tarfile.open(tmp_path, "w:gz") as tar:
+        tar.add(sprite_dir, arcname=".")
+
+    # Set up cleanup
+    @after_this_request
+    def cleanup(response):
+        os.remove(tmp_path)
+        return response
+
+    # Send out gzipped sprites
+    return send_file(
+        tmp_path,
+        as_attachment=True,
+        download_name=f"{name}-sprites.tar.gz",
+        mimetype="application/gzip",
+    )
 

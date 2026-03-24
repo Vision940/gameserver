@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+## templates/engine/game-grid ##
+## This template provides game-specific grid handling functionality from the
+##   grid section of the game config
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+#TODO: make template grid handler that exports info about grid from json config and has grid caller functions with pre-filled size args for ease of use
+
