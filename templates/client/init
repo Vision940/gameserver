@@ -20,17 +20,20 @@
 
 # Check if user sourced
 # Only necessary in init bc game cmds handle all other code sourced from server
+set -x
 if ! ( return 2>/dev/null ); then
   echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] The game server init script is meant to be sourced." 1>&2
   echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Please source this script to proceed." 1>&2
-  exit
+  echo exit
 fi
+set +x
 
 # This is functionized so nothing remains client-side if error on init
 __gs_deps_check() {
   # Self destruct on first run
   unset -f __gs_deps_check
 
+  # Only checking mkfifo from coreutils despite using tty and others
   local __GS_DEPS dep
   __GS_DEPS=(
     openssl
@@ -41,7 +44,10 @@ __gs_deps_check() {
     groff
     less
     tput
+    stty
     getopt
+    mkfifo
+    tar
   )
 
   # Check for possibly missing dependencies

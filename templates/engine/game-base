@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-## templates/engine/base-game ##
+## templates/engine/game-base ##
 ## This template provides the backbone for each gameserver game
 ##
 ## What this enables is a consistent, streamlined experience for both developing
@@ -22,20 +22,31 @@ GS_{{ game.cmd_name | upper }}_VERSION={{ game.version }}
 
 # Source game imports
 __gs_{{ game.cmd_name }}_imports() {
-  local import
-  local route=$1
-  shift
+  # Self destruct on first run
+  unset -f $FUNCNAME
 
   for import in $@; do
-    __gs_source_file $import $route
+    __gs_source_file "${import##*/}" "${import%/*}"
   done
 }
-__gs_{{ game.cmd_name }}_imports static {{ game.imports.statics | join(' ') }}
-__gs_{{ game.cmd_name }}_imports templates {{ game.imports.templates | join(' ') }}
-unset -f __gs_{{ game.cmd_name }}_imports
+__gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
 
 # Provide rendered user-facing game command
 {{ game.cmd_name }}() {
+  {% if game.min_bash %}
+  __gs_bash_ver_check {{ game.min_bash }} || {
+    __gs_errormsg "$FUNCNAME requires bash >= {{ game.min_bash }} to run"
+    return 1
+  }
+  {% endif %}
+  __gs_setdebug $1 || shift
+
+  if [[ "${GS_API_KEY:-null}" == "null" && "$1" != "login" ]]; then
+    __gs_errormsg "Please log in to the game server with \`${FUNCNAME[-1]} login\` to continue."
+    __gs_errormsg "If logging in for the first time, input desired password to login prompt."
+    return 1
+  fi
+
   #TODO: add getopt parsing for --quiet, --help, etc
   case _$1_ in
     _play_) : Play the game
@@ -43,14 +54,21 @@ unset -f __gs_{{ game.cmd_name }}_imports
       __gs_{{ game.cmd_name }}_main
     ;;
     _help_) : Open {{ game.cmd_name }} help
-      echo To be implemented!
+      #TODO: man pages for games
+      __gs_doccer
     ;;
-    __)
-      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
-    ;;
+    #TODO: add update specific handling to init latest game version as well
     *)
-      __gs_errormsg "Option $1 not found."
-      __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+      # Pass to game if option not supported here
+      # This allows login/logout/passwd/update/help for all game cmds
+      if declare -f game &>/dev/null; then
+        game $@
+      else
+        __gs_errormsg "Option $1 not found."
+        __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+        return 1
+      fi
+    ;;
   esac
 }
 __gs_source_template {{ game.cmd_name }}-completion

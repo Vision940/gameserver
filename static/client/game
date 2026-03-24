@@ -11,6 +11,7 @@
 ##   fetcher - functions to fetch code from server
 ##   messenger - functions to enable server messaging for logins/version checking/api keys
 ##   logging - functions that enable consistent info/warn/debug/error messages server-wide
+##   utility - functions to simplify other functions
 ##
 ## Functions:
 ##   game [OPTS]
@@ -23,7 +24,7 @@
 __GS_IMPORTS=(
   sources/cmdenv/cmdenv
   sources/tput/tput
-  functions/{docs,fetcher,messenger,logging}
+  functions/{docs,fetcher,messenger,logging,utility}
 )
 
 for import in ${__GS_IMPORTS[@]}; do
@@ -104,6 +105,7 @@ game() {
     *)
       __gs_errormsg "Option $1 not found."
       __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+    ;;
   esac
 }
 __gs_source_template game-completion

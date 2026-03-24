@@ -34,7 +34,7 @@ __gs_passwd_prompt() {
     { __gs_errormsg "Timed out"; return 1; }
 
   [[ -z "$password" ]] &&
-    { __gs_errormsg "\nPassword cannot be empty."; return 1; }
+    { __gs_errormsg "Password cannot be empty."; return 2; }
   hashedPassword=$(openssl dgst -sha256 <<<"$password" | awk '{print $2}')
   unset password
 

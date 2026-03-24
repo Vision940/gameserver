@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+
+## static/engine/streams ##
+## This file contains functions for FD, FIFO, and stream handling in games
+##
+## The goal of streams is to simplify event-driven communication within a game
+##   by opening up an FD using a FIFO/device that can be used to send events
+##   between simultaneous running background processes
+## For example, a game can kick off a keyboard reader (see static/engine/input)
+##   and a FIFO event stream in the game's init process and have the keyboard
+##   input stream send subscribed events directly to the game's event handler
+##   based on keyboard handler subscriptions, all while running a while true
+##   loop in the game's main function that can remain dumb
+##
+## Functions:
+##   __gs_fifo (init NAME|deinit GS_NAME)
+##     function to init/deinit FIFO streams in GS_CACHE
+##     actions:
+##       init NAME - create FIFO named pipe in the GS_CACHE dir and store in GS_${NAME^^}
+##       deinit GS_NAME - erase $GS_NAME FIFO named pipe from GS_CACHE
+##   __gs_fd (open FDVAR MODE PATH|close FD|is-open FD [MODE=rw])
+##     function to redirect logs/stderr while in the alt screen
+##     MODE is one of (r|w|rw)
+##     actions:
+##       open FDVAR MODE PATH - open FD on PATH with MODE and save FD to FDVAR
+##       close FD: closes FD
+##       is-open FD [MODE=rw]: checks if FD is open according to MODE
+##   __gs_stream ([-f FIFO-REP] create|destroy) NAME
+##     function to simplify and streamline FD/FIFO handling by creating "stream"
+##       with consistent naming convention and components
+##     this is the preferred function to use in games
+##     actions apply to NAME stream
+##     actions:
+##       [-f FIFO-REP] create: get stream NAME set up with FD and FIFO/device
+##                             use FIFO-REP over creating a FIFO named pipe if set
+##                             calling this sets GS_${NAME^^} and GS_${NAME^^}_FD in env
+##       destroy: destroy stream with NAME
+##                removes FIFO if created, closes FD, and unsets variables
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_fifo() {
+  local action="$1"
+  local name="$2"
+  __gs_required_args action name || return 2
+
+  case _${action}_ in
+    _init_)
+      __gs_required_args -n GS_CACHE || return 1
+
+      local varName="GS_${name^^}"
+      export $varName="$GS_CACHE/$name.$$"
+      mkfifo ${!varName} || return 1
+      __gs_debugmsg "Made FIFO $varName at ${!varName}"
+    ;;
+    _deinit_)
+      __gs_required_args -n "$name" || return 1
+      command rm -f "${!name}" || return 1
+    ;;
+  esac
+}
+
+__gs_fd() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _open_)
+      local fdvar="$2"
+      local mode="$3"
+      local path="$4"
+      local fd
+
+      __gs_required_args fdvar mode path || return 2
+
+      [[ ! " r w rw " =~ " $mode " ]] && {
+        __gs_errormsg "Game FD mode must be one of: \"r w rw\""
+        return 2
+      }
+
+      # Prefer dynamic FD allocation (bash 4.1+)
+      if __gs_bash_ver_check 4.1; then
+        case "$mode" in
+          r)  exec {fd}<"$path"  || return 1 ;;
+          w)  exec {fd}>"$path"  || return 1 ;;
+          rw) exec {fd}<>"$path" || return 1 ;;
+        esac
+        export $fdvar="$fd"
+        return 0
+      fi
+
+      # Fall back to hard-coded available FD from 3-9
+      for fd in {3..9}; do
+        if ! __gs_fd is-open $fd; then
+          case "$mode" in
+            r)  eval "exec ${fd}<\"\$path\""  || return 1 ;;
+            w)  eval "exec ${fd}>\"\$path\""  || return 1 ;;
+            rw) eval "exec ${fd}<>\"\$path\"" || return 1 ;;
+          esac
+          export $fdvar="$fd"
+          return 0
+        fi
+      done
+
+      return 1
+    ;;
+    _close_)
+      local fd="$2"
+
+      __gs_required_args fd || return 2
+
+      # Make sure fd is numeric
+      [[ "$fd" =~ ^[0-9]+$ ]] || {
+        return 2
+      }
+
+      eval "exec ${fd}>&-" 2>/dev/null || eval "exec ${fd}<&-" 2>/dev/null || return 1
+    ;;
+    _is-open_)
+      local fd="$2"
+      local mode="${3:-rw}"   # any, r, w, rw
+
+      __gs_required_args fd 2>/dev/null || return 2
+
+      case "$mode" in
+        r)
+          : <&"$fd" 2>/dev/null
+          return $?
+        ;;
+        w)
+          : >&"$fd" 2>/dev/null
+          return $?
+        ;;
+        rw)
+          : <&"$fd" 2>/dev/null && : >&"$fd" 2>/dev/null
+          return $?
+        ;;
+      esac
+    ;;
+  esac
+}
+
+__gs_stream() {
+  # Use -f FIFO instead of creating if provided
+  local fifo
+  local opt OPTIND OPTARG
+  while getopts 'f:' opt; do
+    case "$opt" in
+      f) fifo="${OPTARG:-}";;
+      *) __gs_errormsg "Unrecognized option to stream init"; return 2;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  # Ensure correct args passed in
+  local action="$1"
+  local streamName="$2"
+  __gs_required_args action streamName || return 2
+
+  case _${action}_ in
+    _create_)
+      local streamType="${3:-rw}"
+      local fifoName="GS_${streamName^^}"
+
+      if [[ -z "$fifo" ]]; then
+        # Set up FIFO in cache dir
+        __gs_fifo init "$streamName" || return 1
+        __gs_required_args -n "$fifoName" || return 1
+      else
+        # Use passed in FIFO file
+        export ${fifoName}="${fifo}"
+      fi
+
+      # Get FD using FIFO file
+      local fdName="GS_${streamName^^}_FD"
+      if ! __gs_fd open "$fdName" "$streamType" "${!fifoName}"; then
+        __gs_errormsg "Could not open game stream for $streamName"
+        return 1
+      fi
+      __gs_debugmsg "Created FD stream $fdName on FD ${!fdName}"
+    ;;
+    _destroy_)
+      # Ensure fifoName is set in env
+      local fifoName="GS_${streamName^^}"
+      __gs_required_args -nd "$fifoName" || return 1
+
+      # Ensure fdName is set in env
+      local fdName="GS_${streamName^^}_FD"
+      __gs_required_args -nd "$fdName" || return 1
+
+      # Close fd and remove FIFO file if file in cache
+      __gs_fd is-open "${!fdName}" &&
+        __gs_fd close "${!fdName}"
+      if [[ "${!fifoName}" =~ ^"$GS_CACHE" ]]; then
+        __gs_fifo deinit "$fifoName"
+      fi
+      unset $fdName $fifoName
+    ;;
+  esac
+}
+

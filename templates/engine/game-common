@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+## templates/engine/game-common ##
+## This template provides common files and functionality needed for most games
+##
+## Adding this as an import sources common game imports and defines useful common
+##   functions for games to use
+## This file is a helpful resource on common procedure for games that might only
+##   need to do some of the steps for whatever reason
+##
+## Functions:
+##   __gs_GAME_common (init|deinit) - easy function to init/deinit a game
+##                                    provides one fxn call for game setup/teardown
+##   __gs_GAME_exit PARENT - defined if __gs_GAME_exit is undefined in static/games/GAME
+##                           runs `__gs_GAME_common deinit` and is used by term trap
+##
+## Configurable elements to __gs_GAME_common:
+##   mouse: games can add "mouse: true" to their cfg to optionally enable mouse
+##            input while inited
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_source_common() {
+  # Self destruct on first run
+  unset -f $FUNCNAME
+
+  local __GS_COMMON=(
+    games/{{ game.cmd_name }}-utils
+    static/engine/cache
+    static/engine/streams
+    static/engine/input
+    static/engine/term
+  )
+
+  local import
+  for import in ${__GS_COMMON[@]}; do
+    __gs_source_file "${import##*/}" "${import%/*}"
+  done
+}
+__gs_source_common
+
+__gs_{{ game.cmd_name }}_common() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      # Cache init is first because sprites and term need it
+      __gs_cache init {{ game.cmd_name }} || return 1
+      # Load sprites to cache dir for game
+      __gs_cache load-sprites {{ game.cmd_name }} || return 1
+      # Init term for game
+      __gs_{{ game.cmd_name }}_term init || return 1
+      # Get event handler fd
+      __gs_stream create {{ game.cmd_name }}_events || return 1
+      # Init keyboard handler
+      __gs_keyboard init || return 1
+      {% if game.mouse %}
+      # Init mouse handler after keyboard
+      __gs_mouse init || return 1
+      {% endif %}
+    ;;
+    _deinit_)
+      # __gs_GAME_term's RETURN trap runs __gs_term deinit so that is omitted here
+      # Destroy event handler stream
+      __gs_stream destroy {{ game.cmd_name }}_events
+      {% if game.mouse %}
+      # Close mouse handler before keyboard
+      __gs_mouse deinit
+      {% endif %}
+      # Close keyboard handler - must be before deinit cache
+      __gs_keyboard deinit-stream
+      # Remove entire game cache
+      __gs_cache deinit
+      # Untrap keyboard ^C trap as final action
+      __gs_keyboard deinit-trap
+    ;;
+  esac
+}
+
+# Define default exit function if __gs_GAME_exit undefined
+if ! declare -f __gs_{{ game.cmd_name }}_exit &>/dev/null; then
+  __gs_{{ game.cmd_name }}_exit() {
+    # Only run if return of $1 function
+    [[ "${FUNCNAME[1]}" == "$1" ]] || return 1
+
+    __gs_{{ game.cmd_name }}_common deinit
+    return 0
+  }
+fi
+

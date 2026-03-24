@@ -1,9 +1,11 @@
 {
   "version": "0.0.1",
+  "min_bash": 4.0,
   "cmd_name": "tictactoe",
   "full_name": "Tic Tac Toe",
+  "mouse": true,
   "imports": [
-    "static/engine/term",
+    "games/tictactoe-common",
     "static/engine/grid"
   ]
 }

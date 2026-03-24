@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+## templates/engine/game-utils ##
+## This template provides useful game-specific functions games may or may not use
+##
+## This allows game engine functionalities that are specific to a game's cfg to
+##   be consistently implemented across games
+##
+## Functions:
+##   __gs_GAME_term init - init game term from __gs_GAME_(main|common)
+##                         requires GAME exit handler defined as __gs_GAME_exit
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_{{ game.cmd_name }}_term() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      local fxnPrefix="__gs_{{ game.cmd_name }}"
+
+      declare -f ${fxnPrefix}_exit &>/dev/null || {
+        __gs_errormsg "${fxnPrefix}_exit doesn't exist when calling $FUNCNAME"
+        return 1
+      }
+      [[ " ${fxnPrefix}_main ${fxnPrefix}_common " =~ " ${FUNCNAME[1]} " ]] || {
+        __gs_errormsg "$FUNCNAME needs to be called from ${fxnPrefix}_(main|common)"
+        return 1
+      }
+
+      # RETURN trap is a 4.0+ feature
+      __gs_bash_ver_check 4.0 || {
+        __gs_errormsg "$FUNCNAME can only be used with bash >= 4.0"
+        return 1
+      }
+
+      # Set up RETURN trap
+      __gs_trap_check RETURN || return 1
+      local trapTxt="__gs_term deinit ${fxnPrefix}_main; ${fxnPrefix}_exit ${fxnPrefix}_main && trap - RETURN"
+      trap "$trapTxt" RETURN
+
+      __gs_term init -t ${fxnPrefix}_exit || {
+        __gs_errormsg "Could not init term"
+        return 1
+      }
+    ;;
+  esac
+}
+

@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+
+## static/engine/term ##
+## This file contains generalized terminal init/de-init functions for
+##   games to use to enter the alt screen and draw title screens
+##
+## Functions:
+##   __gs_term (init -t EXIT [noparent]|deinit PARENT)
+##     function to handle init/deinit of term into alt screen for games
+##     typically called from __gs_GAME_term template in templates/engine/game-utils
+##     actions:
+##       init -t EXIT [noparent] - init term into alt screen
+##                                 -t arg is required as protective measure
+##                                 EXIT is function to trap to WINCH to exit if resized
+##                                 noparent is required if calling from non-template parent
+##                                 sets LINES and COLUMNS env vars for game function
+##       deinit PARENT - clean up / exit alt screen
+##                       PARENT arg is the desired calling function
+##                       PARENT is a gaurd against bad deinits when trapped to RETURN
+##   __gs_winch_handler EXIT - deinit term and run EXIT fxn on winch signal
+##                             trapped to WINCH at term init runtime
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_term() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      # This check is here to be annoying
+      # Calls to this need to be handled correctly, so this is a protective layer
+      [[ "$2" != "-t" ]] && {
+        __gs_errormsg "Please consult static/engine/term docs before running \`__gs_term init\`"
+        return 1
+      }
+      shift
+
+      local winchExit="$2"
+      __gs_required_args winchExit || return 2
+
+      # Make sure cache inited
+      __gs_required_args -n GS_CACHE || return 1
+
+      # Warn if not called from template
+      [[ ${FUNCNAME[1]} =~ __gs_.*_term || "$3" == "noparent" ]] || {
+        __gs_warnmsg "\`__gs_term init\` is best run from the __gs_{{ game.cmd_name }}_term template in templates/engine/game-utils"
+        __gs_warnmsg "Run with \$3 set to noparent to suppress this message"
+      }
+
+      # Ensure running interactively
+      [[ ! -t 1 ]] && {
+        __gs_errormsg "stdout is not to a terminal!" fatal
+        __gs_cache deinit
+        return 1
+      }
+
+      __gs_trap_check SIGWINCH || return 1
+      trap "__gs_winch_handler $winchExit" WINCH
+
+      shopt -s checkwinsize
+      (:) # this should ensure LINES and COLUMNS are set
+      [[ -z $COLUMNS ]] && COLUMNS=$(tput cols)
+      [[ -z $LINES ]] && LINES=$(tput lines)
+
+      [[ -z $COLUMNS || -z $LINES ]] && {
+        __gs_errormsg "Unable to determine terminal size" fatal
+        return 1
+      }
+
+      tput smcup
+      tput civis
+
+      export GS_OLD_STTY=$(stty -g)
+      stty -echo -icanon -isig -ixon -ixoff min 0 time 1
+
+      __gs_cache_log init
+    ;;
+    _deinit_)
+      local parent="$2"
+      __gs_required_args parent || return 2
+
+      # Only run if return of $1 function
+      [[ "${FUNCNAME[1]}" == "$parent" ]] || return 1
+
+      [[ "$(trap -p WINCH)" =~ __gs_winch_handler ]] && trap - WINCH
+
+      tput rmcup
+      tput cnorm
+      tput sgr0
+
+      stty "$GS_OLD_STTY"
+      unset GS_OLD_STTY
+
+      __gs_cache_log deinit
+    ;;
+  esac
+}
+
+__gs_winch_handler() {
+  local exitFxn="$1"
+  __gs_required_args exitFxn || return 2
+  declare -f $exitFxn &>/dev/null || {
+    __gs_errormsg "$exitFxn arg to $FUNCNAME is not a function"
+    return 2
+  }
+  __gs_errormsg "Terminal resized during game" fatal
+  __gs_term deinit
+  $exitFxn __gs_winch_handler # Run exit fxn
+}
+

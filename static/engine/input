@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+__gs_keyboard() {
+  local action="$1"
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _init_)
+      # Set up FD stream
+      __gs_stream -f "$(tty)" create keyboard rw || return 1
+
+      # Make sure shell never tries to ^C while running
+      __gs_trap_check INT || return 1
+      trap '' INT
+    ;;
+    _deinit-stream_)
+      # Destroy stream
+      __gs_stream destroy keyboard
+    ;;
+    _deinit-trap_)
+      # Restore SIGINT handling
+      [[ "$(trap -p INT)" == "trap -- '' SIGINT" ]] && trap - INT
+    ;;
+    _read_)
+      __gs_required_args -n GS_KEYBOARD_FD || return 1
+
+      local key= retVal
+      local escape_char=$'\u1b'
+      IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.1 key 2>/dev/null
+      retVal=$?
+
+      if (( retVal == 0 )) && [[ $key == "$escape_char" ]]; then
+        IFS= read -ru "$GS_KEYBOARD_FD" -rsn2 -t 0.01 key 2>/dev/null
+        retVal=$?
+        (( retVal == 0 )) || key=$escape_char
+
+        # Catch mouse events if enabled
+        if (( retVal == 0 )) && [[ $key == "[<" && -n "$GS_MOUSE_ENABLED" ]]; then
+          local ch
+          key=
+          while IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.01 ch 2>/dev/null; do
+            key+=$ch
+            [[ $ch == M || $ch == m ]] && break
+          done
+          retVal=$?
+        fi
+      fi
+
+      if [[ -n "$key" ]]; then
+        printf '%q' "$key"
+      fi
+      case $retVal in
+        0)
+          #TODO: default events: l/r/d/u, quit, mouse click on/off, mouse pos (^35;)
+          case $key in
+            q|$'\003')
+              return 1
+            ;;
+            *) return 0 ;;
+          esac
+        ;;
+        *)
+          if (( retVal <= 128 )); then
+            __gs_errormsg "Keyboard read failed with code: $retVal"
+            return 1
+          fi
+        ;;
+      esac
+    ;;
+  esac
+}
+
+__gs_mouse() {
+  local action="$1"
+  __gs_required_args action || return 2
+
+  case _${action}_ in
+    _init_)
+      __gs_required_args -n GS_KEYBOARD_FD
+
+      # Tell terminal to print mouse events
+      printf '\e[?1003h\e[?1006h' >&"$GS_KEYBOARD_FD"
+      export GS_MOUSE_ENABLED=y
+    ;;
+    _deinit_)
+      __gs_required_args -nd GS_KEYBOARD_FD || return 1
+
+      # Tell terminal to stop printing mouse events
+      printf '\e[?1003;1006l' >&"$GS_KEYBOARD_FD"
+      unset GS_MOUSE_ENABLED
+    ;;
+  esac
+}
+
