@@ -17,6 +17,8 @@
 ##       deinit PARENT - clean up / exit alt screen
 ##                       PARENT arg is the desired calling function
 ##                       PARENT is a gaurd against bad deinits when trapped to RETURN
+##                       clears WINCH trap and unsets all env vars with names
+##                         matching ^GS_[XY]_
 ##   __gs_winch_handler EXIT - deinit term and run EXIT fxn on winch signal
 ##                             trapped to WINCH at term init runtime
 ##
@@ -84,6 +86,9 @@ __gs_term() {
       # Only run if return of $1 function
       [[ "${FUNCNAME[1]}" == "$parent" ]] || return 1
 
+      # Stop mouse functionality here because it prints to terminal
+      [[ -n "$GS_MOUSE_ENABLED" ]] && __gs_mouse deinit
+
       [[ "$(trap -p WINCH)" =~ __gs_winch_handler ]] && trap - WINCH
 
       tput rmcup
@@ -94,6 +99,7 @@ __gs_term() {
       unset GS_OLD_STTY
 
       __gs_cache_log deinit
+      __gs_unset_vars_from_prefixes GS_X_ GS_Y_
     ;;
   esac
 }

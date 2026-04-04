@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+#TODO: documentation
+#TODO: readme in dev about creating a game with game config options listed
+
+__gs_tictactoe_main() {
+  # Init game with common setup
+  __gs_tictactoe_common init || return 1
+
+  # Start title screen
+  __gs_tictactoe_title open || return 1
+
+  # Init time vars
+  local last_render_ms=0
+  local now_ms
+
+  # Run until exit raised
+  until $GS_EXIT; do
+    # Read input
+    __gs_keyboard read || return 1
+
+    # Render game every interval
+    now_ms=$(date +%s%3N)
+    if (( now_ms - last_render_ms >= 33 )); then
+      __gs_render tictactoe || return 1
+      last_render_ms=$now_ms
+    fi
+  done
+
+  # Game exited cleanly
+  __gs_debugmsg "Exited using GS_EXIT"
+}
+

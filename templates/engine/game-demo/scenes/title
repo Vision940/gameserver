@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+# Example scene for title screen
+# Used by default if __gs_GAME_title is not defined
+#TODO: This should be led into by the engine animation when that is implemented
+
+#TODO: Remove this when done w dev
+unset -f __gs_tictactoe_title
+
+if ! declare -f __gs_{{ game.cmd_name }}_title &>/dev/null; then
+  __gs_{{ game.cmd_name }}_title() {
+    local action="$1"
+    __gs_required_args action || return 2
+    case _${action}_ in
+      _open_)
+        __gs_scene_manager push title
+        __gs_event subscribe title pause '__gs_{{ game.cmd_name }}_pause open'
+      ;;
+      #TODO: create button manager with play/settings/quit
+      #TODO: quit button should run close which also kills the game
+      *) __gs_scene "$@" title || return 1 ;;
+    esac
+  }
+fi
+

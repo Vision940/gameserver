@@ -5,15 +5,12 @@ import tempfile
 from flask import (
     abort,
     after_this_request,
-    current_app,
     Blueprint,
     render_template,
     Response,
     send_file
 )
-from jinja2 import (
-    TemplateNotFound
-)
+from jinja2 import TemplateNotFound
 
 from imports import config
 from imports.game_objs import Game
@@ -21,7 +18,7 @@ from imports.game_objs import Game
 
 ## Globals ##
 CONFIG = config.load_config(config.SERVER_CONFIG)
-GAME_LIST = [file for file in os.listdir('static/games') if os.path.isfile(f'static/games/{file}')]
+GAME_LIST = [Game(game).source_name for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
 
 bp = Blueprint("games", __name__, url_prefix="/games")
 
@@ -32,7 +29,7 @@ def games():
     try:
         script = render_template(
             "client/games",
-            game_list=GAME_LIST
+            game_list=[Game(game) for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
         )
     except TemplateNotFound:
         abort(404)
@@ -45,7 +42,7 @@ def game_name(name):
     if name not in GAME_LIST:
         abort(404)
 
-    game_obj = Game(f'static/games/configs/{name}.json')
+    game_obj = Game(name)
     try:
         script = render_template(
             "engine/game-base",
@@ -62,7 +59,7 @@ def game_utils(name):
     if name not in GAME_LIST:
         abort(404)
 
-    game_obj = Game(f'static/games/configs/{name}.json')
+    game_obj = Game(name)
     try:
         script = render_template(
             "engine/game-utils",
@@ -79,7 +76,7 @@ def game_common(name):
     if name not in GAME_LIST:
         abort(404)
 
-    game_obj = Game(f'static/games/configs/{name}.json')
+    game_obj = Game(name)
     try:
         script = render_template(
             "engine/game-common",
@@ -94,7 +91,7 @@ def game_common(name):
 @bp.route("/<name>-sprites.tar.gz")
 def get_sprites(name):
     # Check that sprite dir exists
-    sprite_dir=f'static/games/sprites/{name}'
+    sprite_dir=f'static/games/{name}/sprites'
     if not os.path.isdir(sprite_dir):
         abort(404, "Directory not found")
 
@@ -119,4 +116,29 @@ def get_sprites(name):
         download_name=f"{name}-sprites.tar.gz",
         mimetype="application/gzip",
     )
+
+@bp.route('/<name>-demo')
+def game_demo(name):
+    if name not in GAME_LIST:
+        abort(404)
+
+    # Concatenate all demo templates to one file
+    prefix = "engine/game-demo"
+    demo_files = [
+        "game-demo",
+        "scenes/pause",
+        "scenes/title"
+    ]
+    game_obj = Game(name)
+    script=""
+    for file in demo_files:
+        try:
+            script += render_template(
+                f"{prefix}/{file}",
+                game = game_obj
+            )
+        except TemplateNotFound:
+            abort(404)
+
+    return Response(script, mimetype="text/plain")
 

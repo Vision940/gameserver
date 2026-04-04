@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+# Not checking required args much here for speed
+
+__gs_render() {
+  local game="$1"
+  __gs_required_args game || return 2
+
+  # Only continue if an event has occurred
+  $GS_FRAME_DIRTY || return 0
+
+  # Reset frame buffer & set base frame
+  __gs_frame reset || return 1
+  __gs_frame baseframe "$game" || return 1
+
+  # Get current scene
+  __gs_scene_manager top
+  local currScene=$REPLY
+
+  # Render current scene
+  __gs_required_fxn __gs_${game}_${currScene} || return 1
+  __gs_${game}_${currScene} render || return 1
+
+  # Print frame to screen
+  __gs_frame print || return 1
+
+  # Reset flag
+  GS_FRAME_DIRTY=false
+}
+
+__gs_frame() {
+  local action="$1"
+  case _${action}_ in
+    _baseframe_)
+      local game="$2"
+
+      # Use saved previous default frame cells if defined
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      if __gs_required_args -qnv ${var}; then
+        eval 'GS_FRAME_CELLS=("${'"$var"'[@]}")'
+        return 0
+      fi
+
+      # Use user-defined frame handling if available
+      if declare -f __gs_${game}_baseframe &>/dev/null; then
+        __gs_${game}_baseframe
+        return $?
+      fi
+
+      # Get blank without __gs_sprite cache-id for speed
+      local blank="${GSS_CELL["GENERAL_ARCADE_BAR_CELL:0:0"]}"
+
+      #TODO: Have default non-blank cell as well
+
+      # Set default cells
+      local x y
+      for (( y=0; y<LINES; y++ )); do
+        for (( x=0; x<COLUMNS; x++ )); do
+          if (( x < GS_X_START || x >= GS_X_END )); then
+            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]="$blank"
+          else
+            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]=" "
+          fi
+        done
+      done
+
+      $FUNCNAME save-def
+    ;;
+    _cleanup_) __gs_unset_vars_from_prefixes GS_FRAME_ ;;
+    _print_)
+      tput home
+      printf "%s" "${GS_FRAME_CELLS[@]}"
+    ;;
+    _reset_) declare -ga GS_FRAME_CELLS=() ;;
+    _restore-def_)
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      unset $var
+    ;;
+    _save-def_)
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      eval "$var"'=("${GS_FRAME_CELLS[@]}")'
+    ;;
+    _setup_)
+      declare -ga GS_FRAME_CELLS=()
+      GS_FRAME_DIRTY=true
+    ;;
+  esac
+}
+
+__gs_sprite() {
+  local action="$1"
+
+  case _${action}_ in
+    _cache_)
+      local spritefile="$2"
+
+      [[ -f "$spritefile" ]] || {
+        __gs_errormsg "Sprite file \"$spritefile\" not found in file cache"
+        return 1
+      }
+
+      $FUNCNAME cache-id "$spritefile"
+      local sprId="$REPLY"
+
+      local text row=0 col maxw=0
+      while IFS= read -r text; do
+        col=0
+        while __gs_buffer get-cell text; do
+          GSS_CELL["$sprId:$row:$col"]=$REPLY
+          ((col++))
+        done
+        GSS_COLS["$sprId:$row"]=$col
+        (( col > maxw )) && maxw=$col
+        ((row++))
+      done < "$spritefile"
+
+      GSS_ROWS["$sprId"]=$row
+      GSS_WIDTH["$sprId"]=$maxw
+    ;;
+    _cache-id_)
+      local spritefile="$2"
+
+      local sprId="${spritefile//\//_}"
+      sprId="${sprId#*_sprites_}"
+      sprId="${sprId//[- \'\"]/_}"
+      sprId="${sprId%.spr}"
+      sprId="${sprId#_}"
+      REPLY="${sprId^^}"
+    ;;
+    _cleanup_) __gs_unset_vars_from_prefixes GSS_ ;;
+    _draw_)
+      local id="$2"
+      #TODO: Check gsn sprite separate
+      local sprite="${3:-${GSN_SPRITE["$id"]}}"
+      local spritefile="${GS_CACHE}/sprites/$sprite"
+      __gs_required_args id sprite || return 2
+
+      $FUNCNAME cache-id "$spritefile"
+      local sprId=$REPLY
+      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || $FUNCNAME cache "$spritefile" || return 1
+
+      local x0=${GSN_X0["$id"]}
+      local y0=${GSN_Y0["$id"]}
+      local rows=${GSS_ROWS["$sprId"]}
+
+      local base idx
+      for (( row=0; row<rows; row++ )); do
+        y=$(( y0 + row ))
+        base=$(( y * COLUMNS + x0 ))
+        cols=${GSS_COLS["$sprId:$row"]}
+
+        for (( col=0; col<cols; col++ )); do
+          cell=${GSS_CELL["$sprId:$row:$col"]}
+          [[ -z $cell || $cell == ' ' ]] && continue
+          idx=$(( base + col ))
+          [[ ${GS_FRAME_CELLS[$idx]} == "$cell" ]] && continue
+          GS_FRAME_CELLS[$idx]="$cell"
+        done
+      done
+    ;;
+    _setup_)
+      declare -gA GSS_CELL=()
+      declare -gA GSS_ROWS=()
+      declare -gA GSS_COLS=()
+      declare -gA GSS_WIDTH=()
+    ;;
+  esac
+}
+
+__gs_buffer() {
+  local action="$1"
+
+  case _${action}_ in
+    _get-cell_)
+      local __varname="$2"
+      local row="${!__varname}"
+      local esc=$'\e'
+      local reset=$'\e[0m'
+      local prefix= suffix= glyph code
+
+      REPLY=
+      [[ -n "$row" ]] || return 1
+
+      # Optional ANSI prefix
+      while [[ "$row" == "$esc["* ]]; do
+        code="${row%%m*}"
+        [[ "$code" != "$row" ]] || break
+        code+="m"
+        prefix+="$code"
+        row="${row#"$code"}"
+      done
+
+      [[ -n "$row" ]] || return 1
+
+      # One visible glyph
+      glyph="${row:0:1}"
+      row="${row:1}"
+
+      # Optional trailing reset
+      if [[ "$row" == "$reset"* ]]; then
+        suffix="$reset"
+        row="${row#"$reset"}"
+      fi
+
+      REPLY="${prefix}${glyph}${suffix}"
+      if [[ -n "$prefix" && -z "$suffix" && -n "$row" ]]; then
+        row="${prefix}${row}"
+      fi
+      printf -v "$__varname" '%s' "$row"
+    ;;
+  esac
+}
+
+__gs_text() {
+  #TODO: text sprites - .txtspr?
+  local x="$1" y="$2" text="$3"
+  local reset=$'\x1b[0m'
+  local ansi=""
+
+  local pos=$((y * COLUMNS + x ))
+  #TODO: if cell is set with ansi already use that instead of carrying forward
+  local currCell="${GS_FRAME_CELLS["$pos"]}"
+  if [[ $currCell =~ $'\e'\[48\;2\;([0-9]+)\;([0-9]+)\;([0-9]+)m ]]; then
+    local r=${BASH_REMATCH[1]}
+    local g=${BASH_REMATCH[2]}
+    local b=${BASH_REMATCH[3]}
+
+    local bg="${BASH_REMATCH[0]}"
+
+    #TODO: fr? -- also fix colors to be configurable or paletted
+    # Perceived luminescence
+    local lum=$(( 299*r + 587*g + 114*b ))
+
+    local fg=""
+    if (( lum > 128000 )); then
+      fg=$'\e[38;2;0;0;0m'
+    else
+      fg=$'\e[38;2;255;255;255m'
+    fi
+    ansi="${bg}${fg}"
+  fi
+
+  local char idx=0
+  for (( idx=0; idx<${#text}; idx++ )); do
+    char="${text:idx:1}"
+    pos=$((y * COLUMNS + x + idx))
+    GS_FRAME_CELLS[$pos]="${ansi}$char"
+    if (( idx == ${#text}-1 )); then
+      GS_FRAME_CELLS[$pos]+="${reset}"
+    fi
+  done
+}
+

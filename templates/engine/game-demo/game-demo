@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+## templates/engine/game-demo/game-demo ##
+## This template provides the main and exit functions for the demo game
+##
+## These are default functions for a basic game to work that are defined
+##   if not already in a game's code
+## Idea is game dev can make an empty file called "game" and be able to
+##   play the demo game from that game's name
+## These functions and the demo scenes double as simple implementations
+##   for games that do not need special handling for things like exit,
+##   play, pause, etc
+##
+##   __gs_GAME_exit PARENT - defined if __gs_GAME_exit is undefined in static/games/GAME
+##                           runs `__gs_GAME_common deinit` and is used by term trap
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+##TODO: Default main in here
+
+# Define default exit function if __gs_GAME_exit undefined
+if ! declare -f __gs_{{ game.cmd_name }}_exit &>/dev/null; then
+  __gs_{{ game.cmd_name }}_exit() {
+    # Only run if return of $1 function
+    [[ "${FUNCNAME[1]}" == "$1" ]] || return 1
+
+    __gs_{{ game.cmd_name }}_common deinit
+    return 0
+  }
+fi
+

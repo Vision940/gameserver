@@ -4,6 +4,9 @@
 ## gensprite takes advantage of the hard work of Dave Eddy and Ponali to take a
 ##   .txt/.pal file and make a printable half-block emoji sprite entirely in bash
 ##
+## This is decidedly overkill for gs sprite purposes, but it is very cool and allows
+##   us to have easy .bmp images generated of game sprites if that is ever needed
+##
 ## Check out YSAP on youtube to find the videos breaking this down and check out
 ##   github.com/bahamas10/bash-bmp/tree/dave-add-3d for more cool bash bmp stuff
 ##

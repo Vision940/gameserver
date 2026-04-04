@@ -12,13 +12,13 @@
 ##
 
 # Source actual game implementation
-__gs_source_file {{ game.cmd_name }} static/games
-if ! declare -f __gs_{{ game.cmd_name }}_main &>/dev/null; then
+__gs_source_file {{ game.source_name }} static/games/{{ game.source_name }}
+if ! declare -f __gs_{{ game.cmd_name }}_main &>/dev/null && {{ game.has_main | lower}}; then
   __gs_errormsg "Could not source {{ game.cmd_name }} - main function not found in static/games/{{ game.cmd_name }}"
   return
 fi
 
-GS_{{ game.cmd_name | upper }}_VERSION={{ game.version }}
+GS_{{ game.cmd_name | upper | replace('-', '_') }}_VERSION={{ game.version }}
 
 # Source game imports
 __gs_{{ game.cmd_name }}_imports() {
@@ -49,20 +49,23 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
 
   #TODO: add getopt parsing for --quiet, --help, etc
   case _$1_ in
+    {% if game.has_main %}
     _play_) : Play the game
+      #TODO: loading msg here
       echo I\'m playing {{ game.full_name }}!
       __gs_{{ game.cmd_name }}_main
     ;;
+    {% endif %}
     _help_) : Open {{ game.cmd_name }} help
       #TODO: man pages for games
       __gs_doccer
     ;;
     #TODO: add update specific handling to init latest game version as well
     *)
-      # Pass to game if option not supported here
-      # This allows login/logout/passwd/update/help for all game cmds
-      if declare -f game &>/dev/null; then
-        game $@
+      # Pass to default_cmd if option not supported here
+      # This allows easy login/logout/passwd/update/help for all cmds with default_cmd == "game"
+      if declare -f {{ game.default_cmd.split(' ')[0] }} &>/dev/null; then
+        {{ game.default_cmd }} "$@"
       else
         __gs_errormsg "Option $1 not found."
         __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"

@@ -20,13 +20,51 @@ fatal() {
 
 print_half_blocks() {
     for ((y = 0; y < bitmap_height; y+=2)); do
+        local prev_ansi=""
         for ((x = 0; x < bitmap_width; x++)); do
             local color1=( ${ get_bitmap_pixel $x $y; } )
             local color2=( ${ get_bitmap_pixel $x $((y+1)); } )
-            printf "\x1b[48;2;${color1[0]};${color1[1]};${color1[2]}m\x1b[38;2;${color2[0]};${color2[1]};${color2[2]}m▄"
+            local color3=( ${ get_bitmap_pixel $((x+1)) $y; } )
+            local color4=( ${ get_bitmap_pixel $((x+1)) $((y+1)); } )
+
+            local ansi=""
+            if (( ${color1[3]} == 1 )); then
+              ansi+="esc[48;2;${color1[0]};${color1[1]};${color1[2]}m"
+            fi
+            if (( ${color2[3]} == 1 )); then
+              ansi+="esc[38;2;${color2[0]};${color2[1]};${color2[2]}m"
+            fi
+
+            local next_ansi=""
+            if (( ${color3[3]} == 1 )); then
+              next_ansi+="esc[48;2;${color3[0]};${color3[1]};${color3[2]}m"
+            fi
+            if (( ${color4[3]} == 1 )); then
+              next_ansi+="esc[38;2;${color4[0]};${color4[1]};${color4[2]}m"
+            fi
+
+            local suffix=""
+            local prefix="$ansi"
+            if [[ "$next_ansi" != "$ansi" ]]; then
+                suffix="esc[0m"
+            fi
+            if [[ "$prev_ansi" == "$ansi" ]]; then
+                prefix=""
+            fi
+
+            # Full reset if not opaque
+            local char="▄"
+            if (( ${color1[3]} == 0 || ${color2[3]} == 0 )); then
+              ansi=""
+              char=" "
+              prefix=""
+              suffix=""
+            fi
+
+            printf "%s" "${prefix//esc/$'\x1b'}${char}${suffix//esc/$'\x1b'}"
+            prev_ansi="$ansi"
         done
-        #echo -e "\x1b[48m" # Newline
-        echo -e "\x1b[0m" # Newline
+        echo # Newline
     done
 }
 

@@ -24,7 +24,7 @@
 # To load a BMP file, run "read_bmp < [filename].bmp".
 # The "bitmap_loaded" variable is 1 if the bitmap has been loaded correctly, or 0 if none has been loaded or an error occured.
 # To draw to the buffer, use "draw_bitmap [x] [y] [width] [height]". This function supports temporarily cropping an image before drawing it, similar to "ctx.drawImage" in DOM JavaScript.
-# To use an image without needing a buffer, use "get_bitmap_pixel [x] [y]" where x=0,y=0 is the top left corner, which returns the red, green, and blue values of the color.
+# To use an image without needing a buffer, use "get_bitmap_pixel [x] [y]" where x=0,y=0 is the top left corner, which returns the red, green, blue, and alpha values of the color.
 
 bitmap_loaded=0
 bitmap_color_table_r=()
@@ -33,12 +33,13 @@ bitmap_color_table_b=()
 bitmap_data_r=()
 bitmap_data_g=()
 bitmap_data_b=()
+bitmap_data_a=()
 
 # thank you stackoverflow very cool https://stackoverflow.com/a/13890319
 read8() {
     local _char LANG=C
     IFS= read -r -d '' -n 1 _char
-    printf %d \'$_char
+    printf '%d' "'$_char"
 }
 
 read16le() {
@@ -94,6 +95,7 @@ add_indexed_pixel() {
     bitmap_data_r+=(${bitmap_color_table_r[$index]})
     bitmap_data_g+=(${bitmap_color_table_g[$index]})
     bitmap_data_b+=(${bitmap_color_table_b[$index]})
+    bitmap_data_a+=(255)
 }
 
 read_pixel() {
@@ -101,8 +103,10 @@ read_pixel() {
         bitmap_data_b+=(${ read8; })
         bitmap_data_g+=(${ read8; })
         bitmap_data_r+=(${ read8; })
-        if [ $bitmap_bpp -eq 32 ]; then
-            skip8
+        if (( $bitmap_bpp == 32 )); then
+          bitmap_data_a+=(${ read8; })
+        else
+          bitmap_data_a+=(255)
         fi
     elif [ $bitmap_bpp -eq 16 ]; then
         local octet1=${ read8; }
@@ -116,6 +120,7 @@ read_pixel() {
         bitmap_data_r+=($((r*255/63)))
         bitmap_data_g+=($((g*255/63)))
         bitmap_data_b+=($((b*255/63)))
+        bitmap_data_a+=(255)
     elif [ $bitmap_bpp -eq 8 ]; then
         add_indexed_pixel ${ read8; }
     elif [ $bitmap_bpp -eq 4 ]; then
@@ -177,14 +182,17 @@ read_bmp() {
 
     # Info Header
     # "Bill would be proud." - Muukid
-    skip32 # size of the header. this is always 40. why is this in the file
+    local header_size=${ read32le; }
+    if (( header_size != 40 && header_size != 108 )); then
+        fatal "unsupported header size"
+    fi
     bitmap_width=${ read32le; }
     bitmap_height=${ read32le; }
-    skip16 # number of ""planes"". this is always 1. WHY IS THIS IN THE FILE IF IT'S ALWAYS 1. WHAT ARE PANES EVEN FOR??? AREN'T BMP IMAGES ALWAYS OPAQUE??????
+    skip16
     bitmap_bpp=${ read16le; }
     debug "resolution: ${bitmap_width}x${bitmap_height}x${bitmap_bpp}"
-    bitmap_compression=${ read32le; } # why is this 32-bit if there are only 3 ways of storing/compressing the data?? did you expect there to be 4294967296 ways of storing this??????
-    if [ $bitmap_compression -ne 0 ]; then
+    bitmap_compression=${ read32le; }
+    if (( bitmap_compression != 0 && !(bitmap_compression == 3 && bitmap_bpp == 32) )); then
         fatal "compression method $bitmap_compression not supported"
     fi
     bitmap_image_size=${ read32le; }
@@ -192,15 +200,20 @@ read_bmp() {
     skip32
     skip32
     colors_used=${ read32le; }
-    if [ "$bitmap_bpp" -eq "8" ]; then
+    if (( bitmap_bpp == 8 && colors_used == 0 )); then
         colors_used=256
     fi
     debug "palette colors: $colors_used/$((2**bitmap_bpp))"
-    skip32 # this is 2025, every gpu uses true color
+    skip32 # ponali decision (colors)
 
-    header_bytes=$((14+40+4*colors_used))
+   # Skip the rest of the header if it's longer than 40
+    for ((i = 40; i < header_size; i++)); do
+        skip8
+    done
+
+    header_bytes=$((14+header_size+4*colors_used))
     if [ $bitmap_compression -eq 0 ]; then
-        bitmap_image_size=$((file_size-header_bytes))
+        bitmap_image_size=$((file_size-data_offset))
     fi
 
     # Color table (if necessary)
@@ -228,15 +241,16 @@ get_bitmap_pixel() {
     local y=$2
 
     if [ $x -lt 0 ] || [ $x -ge $bitmap_width ] || [ $y -lt 0 ] || [ $y -ge $bitmap_height ]; then
-        echo 0 0 0
-        exit
+        echo -1 -1 -1
+        return
     fi
     local idx=$((x+(bitmap_height-y-1)*bitmap_width))
 
     echo \
         ${bitmap_data_r[$idx]} \
         ${bitmap_data_g[$idx]} \
-        ${bitmap_data_b[$idx]}
+        ${bitmap_data_b[$idx]} \
+        ${bitmap_data_a[$idx]}
 }
 
 min() {
@@ -273,6 +287,7 @@ draw_bitmap() {
         for ((x = 0; x < xmax; x++)); do
             local srcx=$((x+source_x))
             local srcy=$((y+source_y))
+            # This is not updated for rgba
             set_pixel $((x+dest_x)) $((y+dest_y)) ${ get_bitmap_pixel $srcx $srcy; }
         done
     done

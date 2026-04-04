@@ -16,14 +16,14 @@
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
-GS_GAME_LIST="{{ game_list | join(' ') }}"
+GS_GAME_LIST="{{ game_list | map(attribute='cmd_name') | list | join(' ') }}"
 
 {% for game in game_list %}
-{{ game }}() {
-  __gs_infomsg "Loading latest version of {{ game }} from server..."
-  unset -f {{ game }} # Unset placeholder function (this)
-  __gs_source_games {{ game }} # Set up real function
-  command -v {{ game }} &>/dev/null && {{ game }} $@
+{{ game.cmd_name }}() {
+  __gs_infomsg "Loading latest version of {{ game.cmd_name }} from server..."
+  unset -f {{ game.cmd_name }} # Unset placeholder function (this)
+  __gs_source_games {{ game.source_name }} # Set up real function
+  command -v {{ game.cmd_name }} &>/dev/null && {{ game.cmd_name }} $@
 }
 {% endfor %}
 

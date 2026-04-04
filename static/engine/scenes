@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+#Expain how calling gs_scene can save duplicate code
+
+__gs_scene_manager() {
+  local action=$1
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _cleanup_) unset GS_SCENE_STACK GS_SCENE_EVENT_DEPTH ;;
+    _event-depth_)
+      local getorset="$2"
+      __gs_required_args getorset || return 2
+      case _${getorset}_ in
+        _get_)
+          local scene="$3"
+          __gs_required_args scene || return 2
+          $FUNCNAME in-stack $scene || {
+            __gs_errormsg "Tried to get event depth for nonexistent scene \"$scene\""
+            return 1
+          }
+          REPLY=${GS_SCENE_EVENT_DEPTH[$scene]}
+        ;;
+        _set_)
+          local scene="$3" depth="$4"
+          __gs_required_args scene depth || return 2
+
+          $FUNCNAME in-stack $scene || {
+            __gs_errormsg "Tried to set event depth for nonexistent scene \"$scene\""
+            return 1
+          }
+
+          __gs_debugmsg "Setting event depth for \"$scene\" to $depth" 3
+          GS_SCENE_EVENT_DEPTH[$scene]=$depth
+        ;;
+        _top_)
+          ((${#GS_SCENE_STACK[@]})) || return 1
+          local top="${GS_SCENE_STACK[-1]}"
+          REPLY=${GS_SCENE_EVENT_DEPTH[$top]}
+        ;;
+      esac
+    ;;
+    _in-stack_)
+      local scene="$2"
+      __gs_required_args scene || return 2
+      [[ " ${GS_SCENE_STACK[@]} " =~ " $scene " ]]
+    ;;
+    _push_)
+      local scene="$2"
+      __gs_required_args scene || return 2
+      __gs_debugmsg "Pushed scene \"$scene\"" 2
+
+      # Default events raised by keyboard use event depth
+      GS_SCENE_EVENT_DEPTH["$scene"]=1
+      GS_SCENE_STACK+=("$scene")
+
+      __gs_event clear-scene
+    ;;
+    _pop_)
+      local scene="${GS_SCENE_STACK[-1]}"
+      __gs_debugmsg "Popped scene \"${scene}\"" 2
+      unset 'GS_SCENE_EVENT_DEPTH["$scene"]' 'GS_SCENE_STACK[-1]'
+    ;;
+    _setup_)
+      declare -ga GS_SCENE_STACK=()
+      declare -gA GS_SCENE_EVENT_DEPTH=()
+    ;;
+    _top_) REPLY=${GS_SCENE_STACK[-1]} ;;
+  esac
+}
+
+__gs_scene() {
+  local action=$1
+  local scene=${@: -1} # ${!#} also works here
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _open_)
+      __gs_errormsg "Scene \"$scene\" does not have open case"
+      return 1
+    ;;
+    _close_) __gs_scene_manager pop ;;
+    _render_)
+      __gs_text ${GS_X_START:-0} ${GS_Y_START:-0} "I'm rendering scene ${scene}!"
+    ;;
+    *) return 1 ;;
+  esac
+}
+

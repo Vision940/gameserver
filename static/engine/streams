@@ -147,8 +147,8 @@ __gs_stream() {
   local opt OPTIND OPTARG
   while getopts 'f:' opt; do
     case "$opt" in
-      f) fifo="${OPTARG:-}";;
-      *) __gs_errormsg "Unrecognized option to stream init"; return 2;;
+      f) fifo="${OPTARG:-}" ;;
+      *) __gs_errormsg "Unrecognized option to stream init"; return 2 ;;
     esac
   done
   shift $(( OPTIND - 1 ))

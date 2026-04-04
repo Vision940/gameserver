@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+__gs_event() {
+  local action="$1"
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _cleanup_) unset GS_ACTIVE_EVENTS ;;
+    _clear-scene_)
+      local scene=$2 key
+      [[ -z $scene ]] && {
+        __gs_scene_manager top
+        scene=$REPLY
+      }
+
+      for key in "${!GS_ACTIVE_EVENTS[@]}"; do
+        [[ $key == "${scene}:"* ]] && unset 'GS_ACTIVE_EVENTS[$key]'
+      done
+    ;;
+    _is-active_)
+      local event="$2" scene="${3:-}"
+      __gs_required_args event || return 2
+
+      if [[ -z "$scene" ]]; then
+        __gs_scene_manager top || return 1
+        scene=$REPLY
+      fi
+
+      [[ ${GS_ACTIVE_EVENTS["${scene}:${event}"]+_} ]]
+    ;;
+    _raise_)
+      __gs_scene_manager event-depth top || return 1
+      local recurse=$REPLY
+      shift
+
+      # Handle options
+      local opt OPTIND OPTARG
+      while getopts ':r:f' opt; do
+        case $opt in
+          r) recurse=$OPTARG ;;
+          f) recurse=${#GS_SCENE_STACK[@]} ;;
+          *) return 2 ;;
+        esac
+      done
+      shift $(( OPTIND - 1 ))
+
+      # Get event
+      local event="$1"
+      __gs_required_args event || return 2
+
+      # Get sub-stack to raise event
+      local top=$(( ${#GS_SCENE_STACK[@]} - 1 ))
+      local bottom=$(( ${#GS_SCENE_STACK[@]} - recurse ))
+      (( bottom < 0 )) && bottom=0
+
+      # Raise event handler if active in last RECURSE scenes
+      __gs_debugmsg "Checking for event with recursion level $recurse" 3
+      local scene handler key i
+      for (( i=top; i>=bottom; i-- )); do
+        scene=${GS_SCENE_STACK[$i]}
+        key="${scene}:${event}"
+        handler="${GS_ACTIVE_EVENTS[$key]}"
+
+        if [[ ${handler+_} ]]; then
+          __gs_debugmsg "Raising active event \"$key\"" 2
+          GS_FRAME_DIRTY=true
+          eval "$handler"
+          return $?
+        fi
+      done
+    ;;
+    _setup_) declare -gA GS_ACTIVE_EVENTS=() ;;
+    _subscribe_)
+      local scene="$2" event="$3" handler="$4"
+      __gs_required_args scene event handler || return 2
+
+      local key="${scene}:${event}"
+      $FUNCNAME is-active "$event" "$scene" && {
+        __gs_debugmsg "Overwriting event subscription for \"${key}\": \"${GS_ACTIVE_EVENTS[$REPLY]}\" -> \"$handler\"" 3
+      }
+      __gs_debugmsg "Subscribed event \"${key}\" to handler \"${handler}\"" 2
+
+      GS_ACTIVE_EVENTS["$key"]="$handler"
+    ;;
+    _unsubscribe_)
+      local scene="$2" event="$3"
+      __gs_required_args scene event || return 2
+      unset 'GS_ACTIVE_EVENTS["${scene}:${event}"]'
+    ;;
+    *)
+      __gs_errormsg "Unsupported action to $FUNCNAME: $action"
+      return 2
+      ;;
+  esac
+}
+

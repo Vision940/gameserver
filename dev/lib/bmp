@@ -44,16 +44,18 @@ u16le() {
 	printf '%b' "$out"
 }
 
-bmp-rgb() {
+bmp-rgba() {
 	local r=$1
 	local g=$2
 	local b=$3
+  local a="$4"
 	local out
 
 	printf -v out '\\x%02x' \
 	    "$((b&255))" \
 	    "$((g&255))" \
-	    "$((r&255))"
+	    "$((r&255))" \
+      "$((a&255))"
 	printf '%b' "$out"
 }
 
@@ -68,7 +70,7 @@ bmp-header() {
 	local width=$1
 	local height=$2
 
-	local bits_per_px=24
+	local bits_per_px=32
 	local bytes_per_px=$((bits_per_px / 8))
 
 	local row_size=$((width * bytes_per_px))
@@ -81,7 +83,7 @@ bmp-header() {
 	done
 
 	local pixel_data_size=$((row_size * height))
-	local pixel_data_offset=$((14 + 40))
+	local pixel_data_offset=$((14 + 108))
 
 	# size of entire file
 	local file_size=$((pixel_data_size + pixel_data_offset))
@@ -99,9 +101,9 @@ bmp-header() {
 	## DataOffset
 	u32le "$pixel_data_offset"
 
-	# InfoHeader (40 bytes)
+	# InfoHeader (108 bytes) - BITMAPV4HEADER
 	## Size
-	u32le 40
+	u32le 108
 
 	## Width
 	u32le "$width"
@@ -116,10 +118,10 @@ bmp-header() {
 	u16le "$bits_per_px"
 
 	## Compression
-	u32le 0
+	u32le 3
 
 	## ImageSize
-	u32le 0
+	u32le "$pixel_data_size"
 
 	## XPixelsPerM
 	u32le 0
@@ -131,6 +133,35 @@ bmp-header() {
 	u32le 0
 
 	## ColorsImportant
+	u32le 0
+
+	## RedMask
+	u32le 0x00ff0000
+
+	## GreenMask
+	u32le 0x0000ff00
+
+	## BlueMask
+	u32le 0x000000ff
+
+	## AlphaMask
+	u32le 0xff000000
+
+	## CSType (= LCS_sRGB)
+	u32le 0x73524742
+
+	## Endpoints (CIEXYZTRIPLE, 9 DWORDs = 36 bytes)
+	u32le 0; u32le 0; u32le 0
+	u32le 0; u32le 0; u32le 0
+	u32le 0; u32le 0; u32le 0
+
+	## GammaRed
+	u32le 0
+
+	## GammaGreen
+	u32le 0
+
+	## GammaBlue
 	u32le 0
 
 	REPLY=$padding

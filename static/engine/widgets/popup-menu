@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+# Popup menu is meant to be a scene
+
+__gs_popup_menu() {
+  local action="$1" id="$2"
+  __gs_required_args action || return 2
+  [[ $action != setup ]] && { __gs_required_args id || return 2; }
+  case _${action}_ in
+    _destroy_)
+      # Wrap node destroy to restore default frame
+      __gs_frame restore-def
+      __gs_node "$@"
+    ;;
+    _init_)
+      shift 2
+      __gs_node init popup-menu "$id" -s "widgets/popup-menu/menu-box-${id}.spr" "$@" || return 2
+      shift "$(( REPLY - 2 ))"
+
+      local label="Menu"
+      local opt OPTIND OPTARG
+      while getopts ':l:' opt; do
+        case $opt in
+          l) label="$OPTARG" ;;
+          *) return 2 ;;
+        esac
+      done
+      shift $(( OPTIND - 1 ))
+
+      (($#)) || {
+        __gs_errormsg "No button definitions provided to popup menu"
+        return 2
+      }
+
+      local x0=${GSN_X0["$id"]}
+      local y0=${GSN_Y0["$id"]}
+      local w=${GSN_WIDTH["$id"]}
+
+      # Draw static sprites to default frame on load
+      __gs_sprite draw "$id"
+      local labelLen="${#label}"
+      __gs_text "$(( x0 + w / 2 - labelLen / 2 - labelLen % 2 ))" "$(( y0 + 1 ))" "$label"
+      __gs_frame save-def
+
+      # Init button manager
+      __gs_button_manager init "$id"
+
+      # Define buttons in manager
+      #TODO: Configurable x offset
+      local suffix=":$(( x0 + 3 )):0"
+      __gs_button_manager add-buttons "$id" "${@/%/$suffix}" || {
+        __gs_errormsg "Could not init button manager"
+        return 1
+      }
+
+      # Change y0 for each button in menu after init
+      local idx=0 y sprHeight
+      while IFS= read -r btn; do
+        [[ -z $btn ]] && continue
+        local buttonSpr="${GS_CACHE}/sprites/${GSN_SPRITE["$btn"]}"
+        __gs_sprite cache-id "$buttonSpr"
+        sprHeight="${GSS_ROWS["$REPLY"]}"
+        y=$(( y0 + 3 + idx * (sprHeight + 1) ))
+
+        GSN_Y0["$btn"]=$y
+        ((idx++))
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+    ;;
+    _render_) __gs_button_manager render "$id" ;;
+    #TODO: setup?
+    _setup_) : ;;
+    _subscribe-defaults_) __gs_button_manager subscribe-defaults "$id" ;;
+    *) __gs_node "$@" ;;
+  esac
+}
+

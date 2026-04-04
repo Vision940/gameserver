@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+__gs_button_manager() {
+  local action="$1" id="$2"
+  __gs_required_args action id || return 2
+  case _${action}_ in
+    _add-buttons_)
+      shift 2
+      (($#)) || return 2
+
+      local idx=${#GSW_BTNMAN["$id"]}
+      local btnMan def label event extra
+      for def in "$@"; do
+        # def var should be "label:event:x:y"
+        IFS=':' read -r label event x y extra <<<"$def"
+        __gs_required_args label event x y || return 2
+
+        btnId="${id}_button_${idx}"
+        __gs_button init "$btnId" -x "$x" -y "$y" "$label" "$event" || return 1
+
+        __gs_node add-child "$id" "$btnId"
+        __gs_node set-parent "$btnId" "$id"
+
+        if [[ -z "${GSW_BTNMAN["$id"]}" ]]; then
+          GSW_BTNMAN_SEL["$id"]="$btnId"
+        else
+          GSW_BTNMAN["$id"]+=' '
+        fi
+        GSW_BTNMAN["$id"]+="$btnId"
+        ((idx++))
+      done
+    ;;
+    _click-mouse_)
+      # Only click button if mouse is in pos
+      __gs_node contains-point -m "$id" || return 0
+    ;&
+    _click_)
+      # Click currently selected button
+      __gs_button click "${GSW_BTNMAN_SEL["$id"]}" || return 1
+      return 0
+    ;;
+    _destroy_)
+      local btn
+      while IFS= read -r btn; do
+        [[ -n $btn ]] && __gs_button destroy "$btn"
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+
+      unset \
+        'GSW_BTNMAN["$id"]' \
+        'GSW_BTNMAN_SEL["$id"]'
+    ;;
+    _init_)
+      GSW_BTNMAN["$id"]=""
+      GSW_BTNMAN_SEL["$id"]=""
+      __gs_debugmsg "Created button manager for \"$id\"" 2
+    ;;
+    _next-btn_)
+      local btn newSel=
+      local currHit=false
+      # Iterate through buttons
+      while IFS= read -r btn; do
+        # If last button in loop was sel, sel this one & break
+        $currHit && { newSel="$btn"; break; }
+        # If this button is sel, sel next one in list
+        [[ "${GSW_BTNMAN_SEL["$id"]}" == "$btn" ]] && currHit=true
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+      # The loop logic leaves the last button selected
+
+      # Actually set selection
+      [[ -n "${newSel:-}" ]] && GSW_BTNMAN_SEL["$id"]="$newSel"
+    ;;
+    _prev-btn_)
+      local btn newSel=
+      # Iterate through buttons
+      while IFS= read -r btn; do
+        # If this button is sel, break
+        [[ "${GSW_BTNMAN_SEL["$id"]}" == "$btn" ]] && break
+        # Set btn as selected as long as loop hits it
+        newSel="$btn"
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+      # The loop logic leaves the first button selected
+
+      # Actually set selection
+      [[ -n "${newSel:-}" ]] && GSW_BTNMAN_SEL["$id"]="$newSel"
+    ;;
+    _render_)
+      # Render each button
+      local btn arg
+      while IFS= read -r btn; do
+        [[ "${GSW_BTNMAN_SEL["$id"]}" == "$btn" ]] && arg="-h" || arg=
+        __gs_button render "$btn" "$arg" || return 1
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+    ;;
+    _subscribe-defaults_)
+      # Subscribe to movements
+      __gs_event subscribe "$id" up "__gs_button_manager prev-btn '$id'"
+      __gs_event subscribe "$id" left "__gs_button_manager prev-btn '$id'"
+      __gs_event subscribe "$id" down "__gs_button_manager next-btn '$id'"
+      __gs_event subscribe "$id" right "__gs_button_manager next-btn '$id'"
+      __gs_event subscribe "$id" enter "__gs_button_manager click '$id'"
+
+      # Optionally support mouse
+      if [[ -n "${GS_MOUSE_ENABLED}" ]]; then
+        __gs_event subscribe "$id" mouse-move "__gs_button_manager update-selected '$id'"
+        __gs_event subscribe "$id" mouse-left-down "__gs_button_manager click-mouse '$id'"
+      fi
+    ;;
+    _update-selected_)
+      # Check for mouse override
+      [[ -z "$GS_MOUSE_ENABLED" ]] && return 0
+
+      # Get selected button as stored
+      local sel="${GSW_BTNMAN_SEL["$id"]}"
+
+      local btn x y
+      IFS=',' read -r x y <<<"${GS_MOUSE_POS}"
+      while IFS= read -r btn; do
+        if __gs_button contains-point "$btn" $x $y; then
+          sel="$btn"
+          break
+        fi
+      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
+
+      # Set global var
+      GSW_BTNMAN_SEL["$id"]="$sel"
+    ;;
+  esac
+}
+
+__gs_button() {
+  local action="$1" id="$2"
+  __gs_required_args action || return 2
+  [[ $action != setup ]] && { __gs_required_args id || return 2; }
+  case _${action}_ in
+    _init_)
+      # Use id sprite paths if available
+      local buttonSpr="widgets/button/button-${id}.spr"
+      [[ ! -f "${GS_CACHE}/sprites/${buttonSpr}" ]] && buttonSpr="widgets/button/button-default.spr"
+      local selSpr="widgets/button/button-selected-${id}.spr"
+      [[ ! -f "${GS_CACHE}/sprites/${selSpr}" ]] && selSpr="widgets/button/button-selected-default.spr"
+
+      # Init button node
+      shift 2
+      __gs_node init button "$id" -s "${buttonSpr}" "$@" || return 2
+      shift "$(( REPLY - 2 ))"
+
+      local label="$1" event="$2"
+      __gs_required_args label event || return 2
+
+      # Set GSW vars
+      GSW_BUTTON_LABEL["$id"]="$label"
+      GSW_BUTTON_EVENT["$id"]="$event"
+      GSW_BUTTON_SEL_SPRITE["$id"]="$selSpr"
+    ;;
+    _click_) __gs_event raise "${GSW_BUTTON_EVENT["$id"]}" ;;
+    _render_)
+      shift 2
+      local sel=false
+      local opt OPTIND OPTARG
+      while getopts ':h' opt; do
+        case $opt in
+          # Opt is h for highlight to avoid mixing up with -s SPRITE
+          h) sel=true ;;
+          *) return 2 ;;
+        esac
+      done
+      shift $(( OPTIND - 1 ))
+
+      local x=${GSN_X0["$id"]} y=${GSN_Y0["$id"]}
+      local label="${GSW_BUTTON_LABEL["$id"]}"
+
+      if $sel; then
+        __gs_sprite draw "$id" "${GSW_BUTTON_SEL_SPRITE["$id"]}"
+      else
+        __gs_sprite draw "$id"
+      fi
+
+      # If no label, our work here is done
+      [[ -n "$label" ]] || return 0
+
+      # Draw text if label present
+      local middleX=$(( x + ${GSN_WIDTH["$id"]} / 2 - ${#label} / 2 ))
+      local middleY=$(( y - ${GSN_HEIGHT["$id"]} / 2 ))
+      $sel && __gs_text "$middleX" "$middleY" "$label" || __gs_text "$middleX" "$middleY" "$label"
+    ;;
+    _setup_)
+      declare -gA GSW_BUTTON_LABEL=()
+      declare -gA GSW_BUTTON_EVENT=()
+      declare -gA GSW_BUTTON_SEL_SPRITE=()
+      declare -gA GSW_BTNMAN=()
+      declare -gA GSW_BTNMAN_SEL=()
+    ;;
+    *) __gs_node "$@" ;;
+  esac
+}
+

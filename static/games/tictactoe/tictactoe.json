@@ -6,6 +6,6 @@
   "mouse": true,
   "imports": [
     "games/tictactoe-common",
-    "static/engine/grid"
+    "static/engine/widgets/grid"
   ]
 }

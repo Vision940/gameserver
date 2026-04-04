@@ -1,15 +1,16 @@
+#!/usr/bin/env python3
+
+import importlib
 import signal
+import os
 
 from flask import (
+    Blueprint,
     Flask,
     jsonify,
     render_template,
     request,
     Response
-)
-from jinja2 import (
-    ChoiceLoader,
-    FileSystemLoader
 )
 
 from imports import __version__ as SERVER_API_VER
@@ -20,20 +21,25 @@ from imports.games import (
     bp as games_bp,
     GAME_LIST
 )
-from imports.man import (
-    bp as man_bp,
-    MAN_DIR
-) # man index and html/terminal pages
+from imports.man import bp as man_bp # man index and html/terminal pages
 
 app = Flask(__name__)
 app.register_blueprint(games_bp)
 app.register_blueprint(man_bp)
 
-# Add man pages to jinja template paths
-app.jinja_loader = ChoiceLoader([
-    app.jinja_loader,
-    FileSystemLoader(MAN_DIR),
-])
+# Dynamically import game route blueprints
+for game_dir in os.listdir('static/games'):
+    bp_dir=f'static/games/{game_dir}'
+    for filename in os.listdir(bp_dir):
+        if filename.endswith('.py') and filename != '__init__.py':
+            module_name = f'{bp_dir.replace("/", ".")}.{filename[:-3]}'
+            module = importlib.import_module(module_name)
+
+            # Find blueprint object within module and add
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if isinstance(attr, Blueprint):
+                    app.register_blueprint(attr)
 
 
 def handle_exit(*args):

@@ -7,8 +7,12 @@
 ##   be consistently implemented across games
 ##
 ## Functions:
-##   __gs_GAME_term init - init game term from __gs_GAME_(main|common)
-##                         requires GAME exit handler defined as __gs_GAME_exit
+##   __gs_GAME_term (init|env)
+##     init - init game term from __gs_GAME_(main|common)
+##            requires GAME exit handler defined as __gs_GAME_exit
+##     env - set game term size vars in env based on term length and xy_ratio
+##           checks if terminal is sized incorrectly and raises error if not
+##           sets GS_{X,Y}_{START,LEN,END}
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -45,6 +49,37 @@ __gs_{{ game.cmd_name }}_term() {
         __gs_errormsg "Could not init term"
         return 1
       }
+    ;;
+    _env_)
+      local min_y={{ game.size_y_min }}
+      local ratio={{ game.size_xy_ratio }}
+      local min_x
+      __gs_calc -ir min_x "${min_y}*${ratio}"
+
+      local real_y=${LINES}
+      local real_x
+      __gs_calc -ir real_x "${real_y}*${ratio}"
+
+      (( LINES < min_y || COLUMNS < min_x )) && {
+        __gs_errormsg "Terminal too small (${COLUMNS}x${LINES})"
+        __gs_errormsg "  {{ game.cmd_name }} needs at least ${min_x} columns x ${min_y} lines"
+        return 1
+      }
+
+      (( COLUMNS < real_x )) && {
+        __gs_errormsg "Terminal too thin (${COLUMNS}x${LINES})"
+        __gs_errormsg "  {{ game.cmd_name }} needs at least ${real_x} columns when run with ${real_y} lines"
+        return 1
+      }
+
+      __gs_calc -ir GS_X_START "${COLUMNS}/2-${real_x}/2"
+      __gs_calc -ir GS_Y_START "${LINES}/2-${real_y}/2" # Should be 0
+      export GS_X_LEN=${real_x}
+      export GS_Y_LEN=${real_y}
+      export GS_X_CENTER=$(( real_x / 2 ))
+      export GS_Y_CENTER=$(( real_y / 2 ))
+      export GS_X_END=$(( GS_X_START + GS_X_LEN ))
+      export GS_Y_END=$(( GS_Y_START + GS_Y_LEN ))
     ;;
   esac
 }

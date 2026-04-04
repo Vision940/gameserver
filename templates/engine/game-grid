@@ -8,4 +8,5 @@
 ##
 
 #TODO: make template grid handler that exports info about grid from json config and has grid caller functions with pre-filled size args for ease of use
+#TODO: Probably delete this file now that __gs_node is around
 

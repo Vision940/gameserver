@@ -25,10 +25,10 @@
 _{{ game }}() {
   local completions
 
-  # Command specific methods added here
-  {% if game == "game" %}
-  __gs_game_comp "$1" "$2" "$3" && return 0
-  {% endif %}
+  # Call command specific method if it exists
+  if declare -f "__gs_{{ game }}_comp" &>/dev/null; then
+    __gs_{{ game }}_comp "$1" "$2" "$3" && return 0
+  fi
 
   local completions=()
   if (( COMP_CWORD == 1 )); then

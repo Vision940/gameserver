@@ -41,14 +41,18 @@ make-bmp() {
 	bmp-header "$width" "$height"
 	local padding=$REPLY
 
-	local r g b y x c
+	local r g b a y x c
 	for ((y = 0; y < height; y++)); do
 		for ((x = 0; x < width; x++)); do
 			c=${SPRITE[height - y - 1]}
 			c=${c:x:1}
+      a=1
+      if [[ "$c" == " " ]]; then
+        a=0
+      fi
 
 			read -r r g b <<< "${PALETTE[$c]}"
-			bmp-rgb "$r" "$g" "$b"
+			bmp-rgba "$r" "$g" "$b" "$a"
 		done
 		debug "handled row $((y + 1))/$height"
 		bmp-pad "$padding"

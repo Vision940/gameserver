@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+## templates/engine/game-demo/scenes/pause ##
+## Example scene for pause screen
+## Used by default if __gs_GAME_pause is not defined
+##
+##TODO: doc function itself
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+#TODO: Remove this when done w dev
+unset -f __gs_tictactoe_pause
+
+#TODO doc every line of this scene
+# Define default pause scene function if __gs_GAME_pause undefined
+if ! declare -f __gs_{{ game.cmd_name }}_pause &>/dev/null; then
+  __gs_{{ game.cmd_name }}_pause() {
+    local action=$1
+    __gs_required_args action || return 2
+    case _${action}_ in
+      _open_)
+        __gs_scene_manager push pause
+        __gs_popup_menu init pause \
+          -c -l "Game Paused" \
+          Resume:pause Controls:controls Quit:quit || return 1
+
+        __gs_popup_menu subscribe-defaults pause
+        __gs_event subscribe pause quit '{ export GS_EXIT=true; }'
+        #TODO: Controls button handling
+        __gs_event subscribe pause pause '__gs_{{ game.cmd_name }}_pause close'
+      ;;
+      _render_) __gs_popup_menu render pause ;;
+      _close_) __gs_popup_menu destroy pause ;&
+      *) __gs_scene "$@" pause || return 1 ;;
+    esac
+  }
+fi
+

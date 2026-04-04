@@ -1,0 +1,8 @@
+{
+  "version": "0.0.0",
+  "min_bash": 4.0,
+  "full_name": "Demo Game",
+  "imports": [
+    "games/GAME-common"
+  ]
+}

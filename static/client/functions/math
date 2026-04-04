@@ -1,0 +1,468 @@
+#!/usr/bin/env bash
+
+## static/client/functions/math ##
+## Built-in gameserver math support for floating point operations
+##
+## This file provides a way to do fp arithmetic in bash using only builtins
+##
+## Functions:
+##   __gs_is_numeric NUM [NUM ...]
+##     simple function that returns 0 if "$@" =~ ^[-0-9.\ ]+$
+##     does not check for multiple decimals, weird negatives, or whatever else
+##     intended to do a basic filter for bogus input to math operations
+##   __gs_fp [-i] OP=(mult|div|sub|add) ARG1 ARG2
+##     function to do basic arithmetic OP on ARG1 and ARG2
+##     assigns result to REPLY
+##     truncates to integer if called with -i flag
+##     works by scaling up floating point input ARGs to integers
+##     after doing OP on the ints, restores result to a floating-point number
+##   __gs_calc [-i] [-r RETVAR] EXPR
+##     calculate result of mathematical EXPR provided to __gs_calc
+##     this fxn works by:
+##       tokenizing infix EXPR
+##       converting tokenized EXPR to postfix with shunting-yard style parser
+##       evaluating postfix with a stack
+##       calling __gs_fp with the correct OP to determine solution
+##     EXPR supports +, -, *, /, ^, unary -, parentheses, implicit mult,
+##       standard operator precedence / associativity
+##     calling with -i will truncate final result to integer
+##     calling with -r will save result to RETVAR instead of printing it
+##
+## Aliases:
+##   calc EXPR
+##     if calc is not a command in the user's env, calc is aliased to __gs_calc
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_is_numeric() {
+  (($#)) || return 2
+  # Print this in debug 2 so not failing completely silently
+  __gs_debugmsg "Checking [[ \"$*\" =~ ^[-0-9. ]+$ ]]" 4
+  [[ "$@" =~ ^[-0-9.\ ]+$ ]]
+}
+
+__gs_fp() {
+  local int=false
+  if [[ "$1" == "-i" ]]; then
+    int=true
+    shift
+  fi
+  local op="$1" opsign
+  [[ " mult div sub add " =~ " $op " ]] || {
+    __gs_errormsg "Invalid op to $FUNCNAME"
+    return 2
+  }
+  shift
+
+  __gs_required_args op
+  __gs_is_numeric $@ || return 2
+
+  # Get fp parts
+  local arg1="$1" arg2="$2"
+  __gs_required_args arg1 arg2 || return 2
+  local fp1 fp2
+  [[ "$arg1" =~ "." ]] && fp1=${arg1#*.} || fp1=''
+  while [[ "$fp1" =~ 0$ ]]; do fp1=${fp1%0}; done
+  [[ "$arg2" =~ "." ]] && fp2=${arg2#*.} || fp2=''
+  while [[ "$fp2" =~ 0$ ]]; do fp2=${fp2%0}; done
+
+  # Set up ints
+  local int1="${arg1%.*}$fp1" int2="${arg2%.*}$fp2"
+  local sign1=0 sign2=0
+  [[ "$int1" =~ ^- ]] && { int1="${int1#\-}"; sign1=1; }
+  while [[ "$int1" =~ ^0 ]]; do int1=${int1#0}; done
+  [[ "$int2" =~ ^- ]] && { int2="${int2#\-}"; sign2=1; }
+  while [[ "$int2" =~ ^0 ]]; do int2=${int2#0}; done
+  local sign=''
+
+  # Get places and multiplier
+  local scale1=${#fp1} scale2=${#fp2}
+  local max=9223372036854775807
+  local places multiplier solution
+  case _${op}_ in
+    _mult_) places=$(( scale1 + scale2 )) ;;
+    _div_) places=$(( (scale1 + scale2) < 6 ? 6 : (scale1 + scale2) )) ;;
+    _sub_) ;&
+    _add_) places=$(( scale1 > scale2 ? scale1 : scale2 )) ;;
+  esac
+
+  # Limit fp digits
+  (( places > 18 )) && {
+    __gs_errormsg "Could not fp $op - too many fractional digits"
+    return 1
+  }
+  multiplier=$(( 10 ** places ))
+
+  # Do common operation-specific handling
+  case _${op}_ in
+    _mult_) ;&
+    _div_)
+      # Handle signs independent of calculation
+      (( (sign1 ^ sign2) == 1 )) && sign='-'
+    ;;
+    _sub_) ;&
+    _add_)
+      # Scale both ints to same place
+      (( scale1 < places )) && int1=$(( int1 * 10 ** (places - scale1) ))
+      (( scale2 < places )) && int2=$(( int2 * 10 ** (places - scale2) ))
+
+      # Restore signs
+      if (( sign1 )); then int1=$(( -int1 )); fi
+      if (( sign2 )); then int2=$(( -int2 )); fi
+    ;;
+  esac
+
+  # Check for overflows and get solution
+  case _${op}_ in
+    _mult_)
+      opsign='*'
+      (( int1 != 0 && int2 != 0 && int1 > max / int2 )) && {
+        __gs_errormsg "Could not fp $op - overflow would occur"
+        return 1
+      }
+
+      solution=$(( int1 * int2 ))
+    ;;
+    _div_)
+      opsign='/'
+      (( int2 == 0 )) && {
+        __gs_errormsg "Could not fp $op - division by zero"
+        return 1
+      }
+
+      #solution = (int1 * 10^(scale2 - scale1) / int2) * multiplier
+      #         = (int1 * 10^(places + scale2 - scale1)) / int2
+      local pow=$(( places + scale2 - scale1 ))
+      if (( pow >= 0 )); then
+        (( int1 != 0 && int1 > max / 10 ** pow )) && {
+          __gs_errormsg "Could not fp $op - overflow would occur"
+          return 1
+        }
+        solution=$(( (int1 * 10 ** pow) / int2 ))
+      else
+        (( int2 > max / 10 ** (-pow) )) && {
+          __gs_errormsg "Could not fp $op - overflow would occur"
+          return 1
+        }
+        solution=$(( int1 / (int2 * 10 ** (-pow)) ))
+      fi
+    ;;
+    _sub_)
+      opsign='-'
+      (( (-int2 > 0 && int1 > max + int2) || (-int2 < 0 && int1 < -max - 1 + int2) )) && {
+        __gs_errormsg "Could not fp $op - overflow would occur"
+        return 1
+      }
+
+      solution=$(( int1 - int2 ))
+      (( solution < 0 )) && { sign='-'; solution=$(( -solution )); }
+    ;;
+    _add_)
+      opsign='+'
+      (( (int2 > 0 && int1 > max - int2) || (int2 < 0 && int1 < -max - 1 - int2) )) && {
+        __gs_errormsg "Could not fp $op - overflow would occur"
+        return 1
+      }
+
+      solution=$(( int1 + int2 ))
+      (( solution < 0 )) && { sign='-'; solution=$(( -solution )); }
+    ;;
+  esac
+
+  # Print the solution with decimal places if not -i
+  local whole='' dec=''
+  printf -v whole '%s' "$(( solution / multiplier ))"
+  if ! $int && (( places > 0 )); then
+    printf -v dec '.%0*d' "$places" "$(( solution % multiplier ))"
+  fi
+  local output="$whole$dec"
+
+  # Strip zeros from end of fp output
+  [[ "$output" =~ "." ]] && {
+    while [[ "$output" =~ 0$ ]]; do output=${output%0}; done
+    [[ "$output" =~ "."$ ]] && output=${output%.}
+  }
+
+  # Strip zeros from beginning of fp output
+  [[ "$output" =~ "." ]] && {
+    while [[ "$output" =~ ^0 ]]; do output=${output#0}; done
+  }
+
+  __gs_debugmsg "Calculated $1$opsign$2=$sign$output" 5
+  printf -v REPLY "%s%s" "$sign" "${output}"
+}
+
+__gs_calc() {
+  local int=false outvar decPlaces
+  local opt OPTIND OPTARG
+  while getopts ':ir:d:' opt; do
+    case "$opt" in
+      i) int=true ;;
+      r) outvar="${OPTARG:-}" ;;
+      d)
+        [[ ! "$OPTARG" =~ ^[-0-9]+$ ]] && continue
+
+        decPlaces=$OPTARG
+        (( decPlaces > 10 )) && decPlaces=10
+        (( decPlaces < 0 )) && decPlaces=0
+      ;;
+      \?) break ;; # Ignore neg numbers as args
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+  local fp_func="__gs_fp"
+
+  local expr=${1//[[:space:]]/}
+  local postfix=()
+  local ops=()
+  local i=0 len=${#expr} ch token prev='start'
+
+  (( $# > 1 )) && {
+    __gs_errormsg "${FUNCNAME[-1]} expects only one arg for EXPR"
+    return 2
+  }
+
+  # Check if called directly
+  local direct=false
+  (( ${#FUNCNAME[@]} == 1 )) && direct=true
+
+  __gs_calc__cleanup() {
+    unset -f \
+      __gs_calc__cleanup \
+      __gs_calc__push_number \
+      __gs_calc__drain_ops \
+      __gs_calc__to_postfix \
+      __gs_calc__eval_postfix
+  }
+
+  __gs_calc__push_number() {
+    local prefix=${1-}
+    token=$prefix
+    [[ -n $prefix ]] && ((i++))
+
+    while (( i < len )); do
+      ch=${expr:i:1}
+      case $ch in
+        [0-9.]) token+=$ch; ((i++)) ;;
+        *) break ;;
+      esac
+    done
+
+    __gs_is_numeric "$token" || {
+      __gs_errormsg "Invalid number to $FUNCNAME: $token"
+      return 2
+    }
+
+    postfix+=("$token")
+    prev='num'
+  }
+
+  __gs_calc__drain_ops() {
+    # Helper to put operators on stack according to precedence / associativity rules
+    local incoming=$1 top incomingPrec topPrec incomingRightAssoc=false
+
+    case $incoming in
+      '+'|'-') incomingPrec=1 ;;
+      '*'|'/') incomingPrec=2 ;;
+      'u-')    incomingPrec=3; incomingRightAssoc=true ;;
+      '^')     incomingPrec=4; incomingRightAssoc=true ;;
+      *)       incomingPrec=0 ;;
+    esac
+
+    while ((${#ops[@]})); do
+      top=${ops[-1]}
+      [[ $top == '(' ]] && break
+
+      case $top in
+        '+'|'-') topPrec=1 ;;
+        '*'|'/') topPrec=2 ;;
+        'u-')    topPrec=3 ;;
+        '^')     topPrec=4 ;;
+        *)       topPrec=0 ;;
+      esac
+
+      if (( topPrec > incomingPrec )) || \
+         (( topPrec == incomingPrec )) && ! $incomingRightAssoc; then
+        postfix+=("$top")
+        unset 'ops[-1]'
+      else
+        break
+      fi
+    done
+
+    ops+=("$incoming")
+    prev="op"
+  }
+
+  __gs_calc__to_postfix() {
+    while (( i < len )); do
+      ch=${expr:i:1}
+
+      case $ch in
+        [0-9.])
+          if [[ $prev == num || $prev == ')' ]]; then
+            __gs_calc__drain_ops "*"
+          fi
+          __gs_calc__push_number || return
+        ;;
+        '+'|'-')
+          ((i++))
+          if [[ ' ( start op ' =~ " $prev " ]]; then
+            if [[ $ch == '+' ]]; then
+              continue
+            fi
+
+            __gs_calc__drain_ops "u-"
+            continue
+          fi
+
+          __gs_calc__drain_ops "$ch"
+        ;;
+        '*'|'/'|'^')
+          ((i++))
+          __gs_calc__drain_ops "$ch"
+        ;;
+        '(')
+          ((i++))
+          if [[ $prev == num || $prev == ')' ]]; then
+            __gs_calc__drain_ops "*"
+          fi
+          ops+=('(')
+          prev='('
+        ;;
+        ')')
+          ((i++))
+          while ((${#ops[@]})) && [[ ${ops[-1]} != '(' ]]; do
+            postfix+=("${ops[-1]}")
+            unset 'ops[-1]'
+          done
+          (( ${#ops[@]} > 0 )) && [[ ${ops[-1]} == '(' ]] || {
+            __gs_errormsg "Mismatched parentheses to $FUNCNAME"
+            return 2
+          }
+          unset 'ops[-1]'
+          prev='num'
+        ;;
+        *)
+          __gs_errormsg "Unsupported token to $FUNCNAME: $ch"
+          return 2
+        ;;
+      esac
+    done
+
+    while ((${#ops[@]})); do
+      [[ ${ops[-1]} != '(' ]] || {
+        __gs_errormsg "Mismatched parentheses to $FUNCNAME"
+        return 2
+      }
+      postfix+=("${ops[-1]}")
+      unset 'ops[-1]'
+    done
+  }
+
+  __gs_calc__eval_postfix() {
+    local stack=()
+    local token a b
+    for token in "${postfix[@]}"; do
+      case $token in
+        'u-')
+          (( ${#stack[@]} >= 1 )) || {
+            __gs_errormsg "Invalid expression to $FUNCNAME"
+            return 2
+          }
+
+          a=${stack[-1]}
+          unset 'stack[-1]'
+          $fp_func sub 0 "$a" || return 1
+          stack+=("$REPLY")
+        ;;
+        '+'|'-'|'*'|'/'|'^')
+          (( ${#stack[@]} >= 2 )) || {
+            __gs_errormsg "Invalid expression to $FUNCNAME"
+            return 2
+          }
+
+          b=${stack[-1]}
+          unset 'stack[-1]'
+          a=${stack[-1]}
+          unset 'stack[-1]'
+
+          case $token in
+            '+') $fp_func add  "$a" "$b" ;;
+            '-') $fp_func sub  "$a" "$b" ;;
+            '*') $fp_func mult "$a" "$b" ;;
+            '/') $fp_func div  "$a" "$b" ;;
+            '^')
+              REPLY=1
+
+              __gs_is_numeric "$b" || {
+                __gs_errormsg "Invalid exponent to $FUNCNAME: $b"
+                return 2
+              }
+
+              [[ $b == *.* ]] && {
+                __gs_errormsg "Fractional exponents not supported to $FUNCNAME"
+                return 2
+              }
+
+              local abs=$b
+              (( abs < 0 )) && abs=$(( -abs ))
+
+              while (( abs > 0 )); do
+                $fp_func mult "$REPLY" "$a" || return 1
+                ((abs--))
+              done
+
+              if (( b < 0 )); then
+                $fp_func div 1 "$REPLY" || return 1
+              fi
+            ;;
+          esac || return 1
+
+          stack+=("$REPLY")
+          ;;
+        *)
+          stack+=("$token")
+          ;;
+      esac
+    done
+
+    (( ${#stack[@]} == 1 )) || {
+      __gs_errormsg "Invalid expression to $FUNCNAME"
+      return 2
+    }
+
+    printf -v REPLY '%s' "${stack[0]}"
+  }
+
+  local rc
+  __gs_calc__to_postfix
+  rc=$?
+
+  __gs_debugmsg "$FUNCNAME postfix is ${postfix[*]}" 4
+
+  if (( rc == 0 )); then
+    __gs_calc__eval_postfix
+    rc=$?
+  fi
+
+  __gs_calc__cleanup
+  $int && REPLY=${REPLY%.*}
+  if [[ -n $decPlaces && $REPLY =~ ^([0-9]+)\.([0-9]{$decPlaces}) ]]; then
+    REPLY="${BASH_REMATCH[1]}${BASH_REMATCH[2]:+.${BASH_REMATCH[2]}}"
+  fi
+
+  if [[ -n "$outvar" ]]; then
+    (( rc == 0 )) && printf -v "$outvar" '%s' "$REPLY"
+  else
+    (( rc == 0 )) && printf '%s' "$REPLY" && $direct && printf '\n'
+  fi
+  return "$rc"
+}
+
+#TODO: Add calc to man pages
+if ! command -v calc &>/dev/null; then
+  alias calc=__gs_calc
+fi
+

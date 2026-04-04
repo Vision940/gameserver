@@ -9,6 +9,7 @@
 ##   tput - tput wrapper to speed up drawing in all games using ANSI esc codes
 ##   docs - renders man help pages for gameserver suite
 ##   fetcher - functions to fetch code from server
+##   math - functions to enable floating point arithmetic using bash builtins
 ##   messenger - functions to enable server messaging for logins/version checking/api keys
 ##   logging - functions that enable consistent info/warn/debug/error messages server-wide
 ##   utility - functions to simplify other functions
@@ -24,7 +25,7 @@
 __GS_IMPORTS=(
   sources/cmdenv/cmdenv
   sources/tput/tput
-  functions/{docs,fetcher,messenger,logging,utility}
+  functions/{docs,fetcher,math,messenger,logging,utility}
 )
 
 for import in ${__GS_IMPORTS[@]}; do

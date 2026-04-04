@@ -24,6 +24,7 @@
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
+#TODO: mention sprites in docs
 __gs_cache() {
   local action="$1"
   __gs_required_args action || return 2
@@ -43,6 +44,7 @@ __gs_cache() {
       __gs_required_args -nd GS_CACHE || return 1
       command rm -rf $GS_CACHE 2>/dev/null
       unset GS_CACHE
+      declare -f __gs_sprite &>/dev/null && __gs_sprite cleanup
     ;;
     #TODO: also load sprites from sprites/default before so that game sprites overwrite
     #TODO: default server sprite route
@@ -51,11 +53,10 @@ __gs_cache() {
       __gs_required_args game || return 2
       __gs_required_args -n GS_URL GS_CACHE || return 1
 
+      # Load default sprites first for all games
+      [[ "$game" != "default" ]] && $FUNCNAME load-sprites default
+
       local spriteDir="$GS_CACHE/sprites"
-      if [[ -d "$spriteDir" ]]; then
-        __gs_debugmsg "Removing existing $spriteDir..." 2
-        command rm -rf "$spriteDir"
-      fi
       command mkdir -p "$spriteDir"
 
       # Retrieve game sprites from server into cache
@@ -72,6 +73,17 @@ __gs_cache() {
       }
       command rm -f "$spriteGz"
 
+      # Need sprite function to cache sprites in env
+      __gs_required_fxn __gs_sprite || return 1
+
+      # Set up sprite env
+      __gs_sprite setup
+
+      # Cache sprites
+      local file
+      while read -r file; do
+        __gs_sprite cache "$file"
+      done < <(find ${GS_CACHE}/sprites -name "*.spr")
       return 0
     ;;
   esac

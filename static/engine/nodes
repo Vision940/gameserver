@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+GS_WIDGET_TYPES="{button,popup-menu}"
+
+#TODO: does test-collision go in node manager?
+__gs_node_manager() {
+  local action="$1"
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _cleanup_) __gs_unset_vars_from_prefixes GSN_ GSW_ ;;
+    _setup_)
+      declare -gA GSN_TYPE=()
+      declare -gA GSN_X0=()
+      declare -gA GSN_Y0=()
+      declare -gA GSN_WIDTH=()
+      declare -gA GSN_HEIGHT=()
+      declare -gA GSN_SPRITE=()
+      declare -gA GSN_VISIBLE=()
+      declare -gA GSN_PARENT=()
+      declare -gA GSN_CHILDREN=()
+
+      # Set up all default UI widget node types
+      local fxn
+      local __GS_WIDGET_FXNS=($(bash -c "echo __gs_${GS_WIDGET_TYPES//-/_}"))
+      for fxn in ${__GS_WIDGET_FXNS[@]}; do
+        __gs_debugmsg "Calling $fxn"
+        $fxn setup || {
+          __gs_errormsg "Could not run node setup on $fxn"
+          return 1
+        }
+      done
+    ;;
+  esac
+}
+
+__gs_node() {
+  local action="$1"
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _init_)
+      local type="$2" id="$3"
+      __gs_required_args type id || return 2
+      shift 3
+
+      local x y w h s
+      local centered=false
+      local opt OPTIND OPTARG
+      while getopts ':x:y:s:c' opt; do
+        case $opt in
+          c) centered=true ;;
+          x) x="$OPTARG" ;;
+          y) y="$OPTARG" ;;
+          s) s="$OPTARG" ;;
+          *) ((OPTIND--)); break ;;
+        esac
+      done
+      local endreply=$(( OPTIND - 1 ))
+
+      __gs_required_args s || return 2
+
+      local spritefile="${GS_CACHE}/sprites/${s}"
+      [[ ! -f "$spritefile" ]] && {
+        __gs_errormsg "Sprite \"$spritefile\" doesn't exist"
+        return 1
+      }
+
+      __gs_sprite cache-id "$spritefile"
+      local sprId="$REPLY"
+      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || __gs_sprite cache "$spritefile" || return 1
+
+      w=${GSS_WIDTH[$sprId]}
+      h=${GSS_ROWS[$sprId]}
+      __gs_required_args w h || return 2
+
+      if ${centered}; then
+        x=$(( COLUMNS / 2 - w / 2 - w % 2))
+        y=$(( LINES / 2 - h / 2 + h % 2))
+      else
+        # Use c as center position and resolve equation inputs
+        __gs_calc -ir x "${x//c/$GS_X_CENTER}" || return 1
+        __gs_calc -ir y "${y//c/$GS_Y_CENTER}" || return 1
+      fi
+      __gs_required_args x y || return 2
+
+      GSN_TYPE["$id"]="$type"
+      GSN_X0["$id"]="$x"
+      GSN_Y0["$id"]="$y"
+      GSN_WIDTH["$id"]="$w"
+      GSN_HEIGHT["$id"]="$h"
+      GSN_SPRITE["$id"]="$s"
+      GSN_VISIBLE["$id"]=1
+      GSN_PARENT["$id"]=""
+      GSN_CHILDREN["$id"]=""
+
+      __gs_debugmsg "Node created with id \"$id\" and type \"$type\"" 2
+
+      REPLY=$endreply
+    ;;
+    _destroy_)
+      local id="$2"
+      __gs_required_args id || return 2
+
+      # Destroy all children
+      local child
+      while IFS= read -r child; do
+        [[ -n $child ]] && __gs_node destroy "$child"
+      done <<<"${GSN_CHILDREN["$id"]// /$'\n'}"
+
+      # Handle GSW-specific cleanup at id
+      case "${GSN_TYPE["$id"]}" in
+        button)
+          unset \
+            'GSW_BUTTON_LABEL["$id"]' \
+            'GSW_BUTTON_EVENT["$id"]' \
+            'GSW_BTNMAN["$id"]' \
+            'GSW_BTNMAN_SEL["$id"]' \
+        ;;
+        popup-menu)
+          :
+        ;;
+      esac
+
+      # Destroy GSN vars at id
+      unset \
+        'GSN_TYPE["$id"]' \
+        'GSN_X0["$id"]' \
+        'GSN_Y0["$id"]' \
+        'GSN_WIDTH["$id"]' \
+        'GSN_HEIGHT["$id"]' \
+        'GSN_SPRITE["$id"]' \
+        'GSN_VISIBLE["$id"]' \
+        'GSN_PARENT["$id"]' \
+        'GSN_CHILDREN["$id"]'
+    ;;
+    _set-parent_)
+      local child="$2" parent="$3"
+      __gs_required_args child parent || return 2
+      GSN_PARENT["$child"]="$parent"
+    ;;
+    _add-child_)
+      local parent="$2" child="$3"
+      __gs_required_args child parent || return 2
+      [[ -n ${GSN_CHILDREN["$parent"]} ]] && GSN_CHILDREN["$parent"]+=' '
+      GSN_CHILDREN["$parent"]+="$child"
+      GSN_PARENT["$child"]="$parent"
+    ;;
+    _contains-point_)
+      # Use mousepos if -m
+      shift
+      local mousepos=false
+      local opt OPTIND OPTARG
+      while getopts ':m' opt; do
+        case $opt in
+          m) mousepos=true ;;
+          *) return 2 ;;
+        esac
+      done
+      shift $(( OPTIND - 1 ))
+
+      local id="$1"
+      local x y
+      if $mousepos; then
+        x=${GS_MOUSE_POS%,*}
+        y=${GS_MOUSE_POS#*,}
+      else
+        x="$2"
+        y="$3"
+      fi
+      __gs_required_args id x y || return 2
+
+      local x0=${GSN_X0["$id"]} y0=${GSN_Y0["$id"]}
+      local w=${GSN_WIDTH["$id"]} h=${GSN_HEIGHT["$id"]}
+      (( x >= x0 && x < x0 + w && y >= y0 && y < y0 + h ))
+    ;;
+    *) return 2 ;;
+  esac
+}
+
+# Source UI widget nodes for use in all games
+__gs_source_file "$GS_WIDGET_TYPES" "static/engine/widgets"
+

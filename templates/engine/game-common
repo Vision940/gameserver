@@ -11,12 +11,13 @@
 ## Functions:
 ##   __gs_GAME_common (init|deinit) - easy function to init/deinit a game
 ##                                    provides one fxn call for game setup/teardown
-##   __gs_GAME_exit PARENT - defined if __gs_GAME_exit is undefined in static/games/GAME
-##                           runs `__gs_GAME_common deinit` and is used by term trap
 ##
 ## Configurable elements to __gs_GAME_common:
 ##   mouse: games can add "mouse: true" to their cfg to optionally enable mouse
 ##            input while inited
+##
+## This sources a default demo game (templates/engine/game-demo) to enable games
+##   being playable in a demo example state after just a directory being created
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -26,11 +27,8 @@ __gs_source_common() {
   unset -f $FUNCNAME
 
   local __GS_COMMON=(
-    games/{{ game.cmd_name }}-utils
-    static/engine/cache
-    static/engine/streams
-    static/engine/input
-    static/engine/term
+    games/{{ game.source_name }}-utils
+    static/engine/{graphics,cache,streams,input,events,term,nodes,scenes}
   )
 
   local import
@@ -46,47 +44,55 @@ __gs_{{ game.cmd_name }}_common() {
 
   case _${action}_ in
     _init_)
+      # Get game name and exit tracker into environment
+      GS_GAME={{ game.cmd_name }}
+      GS_EXIT=false
       # Cache init is first because sprites and term need it
       __gs_cache init {{ game.cmd_name }} || return 1
       # Load sprites to cache dir for game
       __gs_cache load-sprites {{ game.cmd_name }} || return 1
       # Init term for game
       __gs_{{ game.cmd_name }}_term init || return 1
-      # Get event handler fd
-      __gs_stream create {{ game.cmd_name }}_events || return 1
+      # Set up term env variables for game
+      __gs_{{ game.cmd_name }}_term env || return 1
       # Init keyboard handler
       __gs_keyboard init || return 1
       {% if game.mouse %}
       # Init mouse handler after keyboard
       __gs_mouse init || return 1
       {% endif %}
+      # Set up event env
+      __gs_event setup
+      # Set up scene env
+      __gs_scene_manager setup
+      # Set up node/widget envs
+      __gs_node_manager setup
+      # Set up frame env
+      __gs_frame setup
     ;;
     _deinit_)
+      # Remove game name and exit tracker from env
+      unset GS_GAME GS_EXIT
       # __gs_GAME_term's RETURN trap runs __gs_term deinit so that is omitted here
-      # Destroy event handler stream
-      __gs_stream destroy {{ game.cmd_name }}_events
-      {% if game.mouse %}
-      # Close mouse handler before keyboard
-      __gs_mouse deinit
-      {% endif %}
+      # __gs_term deinit deinits mouse, so that is also omitted
       # Close keyboard handler - must be before deinit cache
       __gs_keyboard deinit-stream
       # Remove entire game cache
       __gs_cache deinit
+      # Clean up event env
+      __gs_event cleanup
+      # Clean up scene env
+      __gs_scene_manager cleanup
+      # Clean up node env
+      __gs_node_manager cleanup
+      # Clean up frame env
+      __gs_frame cleanup
+      #TODO: Unset game-specific funcs from prefixes
       # Untrap keyboard ^C trap as final action
       __gs_keyboard deinit-trap
     ;;
   esac
 }
 
-# Define default exit function if __gs_GAME_exit undefined
-if ! declare -f __gs_{{ game.cmd_name }}_exit &>/dev/null; then
-  __gs_{{ game.cmd_name }}_exit() {
-    # Only run if return of $1 function
-    [[ "${FUNCNAME[1]}" == "$1" ]] || return 1
-
-    __gs_{{ game.cmd_name }}_common deinit
-    return 0
-  }
-fi
+__gs_source_games {{ game.source_name }}-demo
 

@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 
 #TODO: docs
+# default-binds can be temporarily overwritten by a game and then re-establised by calling default-binds again
+# doc default recursion parameter here and in event/scene
 
 __gs_keyboard() {
   local action="$1"
   __gs_required_args action || return 2
   case _${action}_ in
+    _bind_)
+      local key="$2" event="$3"
+      __gs_required_args key event || return 2
+      __gs_required_args -nv GS_KEYBOARD_BINDS || return 1
+
+      [[ -n "${GS_KEYBOARD_BINDS[$key]+_}" ]] && {
+        __gs_debugmsg "Overwriting keyboard bind for ${key}: ${GS_KEYBOARD_BINDS[$key]} -> $event" 3
+      }
+      GS_KEYBOARD_BINDS["$key"]="$event"
+    ;;
     _init_)
       # Set up FD stream
       __gs_stream -f "$(tty)" create keyboard rw || return 1
@@ -13,10 +25,58 @@ __gs_keyboard() {
       # Make sure shell never tries to ^C while running
       __gs_trap_check INT || return 1
       trap '' INT
+
+      # Make sure mouse is enabled after keyboard
+      unset GS_MOUSE_ENABLED
+
+      # Set up default key bindings
+      $FUNCNAME default-binds
+    ;;
+    _default-binds_)
+      # Set associative array with default key to event mappings
+      declare -gA GS_KEYBOARD_BINDS=()
+      local key
+      for key in k 8 w \[A; do
+        GS_KEYBOARD_BINDS["$key"]="up"
+      done
+      for key in j 2 s \[B; do
+        GS_KEYBOARD_BINDS["$key"]="down"
+      done
+      for key in h 4 a \[D; do
+        GS_KEYBOARD_BINDS["$key"]="left"
+      done
+      for key in l 6 d \[C; do
+        GS_KEYBOARD_BINDS["$key"]="right"
+      done
+      for key in y 7; do
+        GS_KEYBOARD_BINDS["$key"]="upleft"
+      done
+      for key in b 1; do
+        GS_KEYBOARD_BINDS["$key"]="downleft"
+      done
+      for key in u 9; do
+        GS_KEYBOARD_BINDS["$key"]="upright"
+      done
+      for key in n 3; do
+        GS_KEYBOARD_BINDS["$key"]="downright"
+      done
+      for key in $'\n' $'\r'; do
+        GS_KEYBOARD_BINDS["$key"]="enter"
+      done
+
+      # Make default events for common keys
+      GS_KEYBOARD_BINDS[$'\E']="pause"
+      GS_KEYBOARD_BINDS[$'\t']="tab"
+      GS_KEYBOARD_BINDS[\[Z]="shifttab"
+      GS_KEYBOARD_BINDS[$'\177']="backspace"
+      GS_KEYBOARD_BINDS[\ ]="space"
     ;;
     _deinit-stream_)
       # Destroy stream
       __gs_stream destroy keyboard
+
+      # Unset keybindings
+      unset GS_KEYBOARD_BINDS
     ;;
     _deinit-trap_)
       # Restore SIGINT handling
@@ -27,50 +87,91 @@ __gs_keyboard() {
 
       local key= retVal
       local escape_char=$'\u1b'
-      IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.1 key 2>/dev/null
+      IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -d '' -t 0.001 key 2>/dev/null
       retVal=$?
 
       if (( retVal == 0 )) && [[ $key == "$escape_char" ]]; then
-        IFS= read -ru "$GS_KEYBOARD_FD" -rsn2 -t 0.01 key 2>/dev/null
+        IFS= read -ru "$GS_KEYBOARD_FD" -rsn2 -t 0.001 key 2>/dev/null
         retVal=$?
-        (( retVal == 0 )) || key=$escape_char
+        (( retVal == 0 )) || { key=$escape_char; retVal=0; }
 
         # Catch mouse events if enabled
         if (( retVal == 0 )) && [[ $key == "[<" && -n "$GS_MOUSE_ENABLED" ]]; then
           local ch
           key=
-          while IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.01 ch 2>/dev/null; do
+          while IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.001 ch 2>/dev/null; do
             key+=$ch
             [[ $ch == M || $ch == m ]] && break
           done
           retVal=$?
+
+          # Drain mouse move buffer to latest pos
+          if [[ $key =~ ^35\;[0-9]+\;[0-9]+M$ ]]; then
+            local seq
+            local last=$key
+
+            while :; do
+              IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.0005 key 2>/dev/null || break
+              [[ $key == $'\e' ]] || break
+
+              IFS= read -ru "$GS_KEYBOARD_FD" -rsn2 -t 0.0005 key 2>/dev/null || break
+              [[ $key == "[<" ]] || break
+
+              key=
+              while IFS= read -ru "$GS_KEYBOARD_FD" -rsn1 -t 0.0005 ch 2>/dev/null; do
+                key+=$ch
+                [[ $ch == M || $ch == m ]] && break
+              done
+
+              [[ $key =~ ^35\;[0-9]+\;[0-9]+M$ ]] || break
+              last=$key
+            done
+            key=$last
+          fi
         fi
       fi
 
-      if [[ -n "$key" ]]; then
+      if [[ -n "$key" ]] && (( GS_DEBUGLEVEL >= 10 )); then
+        tput cup $LINES 0
         printf '%q' "$key"
       fi
-      case $retVal in
-        0)
-          #TODO: default events: l/r/d/u, quit, mouse click on/off, mouse pos (^35;)
-          case $key in
-            q|$'\003')
-              return 1
-            ;;
-            *) return 0 ;;
-          esac
-        ;;
-        *)
-          if (( retVal <= 128 )); then
-            __gs_errormsg "Keyboard read failed with code: $retVal"
-            return 1
-          fi
-        ;;
-      esac
+
+      # Return fine if no key read
+      (( retVal != 0 )) && return 0
+
+      # Handle key press by raising relevant event
+      if [[ $key =~ ^([0-9]+)\;([0-9]+)\;([0-9]+)([Mm])$ ]]; then
+        local code=${BASH_REMATCH[1]}
+        local x=${BASH_REMATCH[2]}
+        local y=${BASH_REMATCH[3]}
+        local final=${BASH_REMATCH[4]}
+
+        GS_MOUSE_POS="${x},${y}"
+
+        case "${code}:${final}" in
+          0:M)  __gs_event raise mouse-left-down ;;
+          1:M)  __gs_event raise mouse-middle-down ;;
+          2:M)  __gs_event raise mouse-right-down ;;
+          0:m)  __gs_event raise mouse-left-up ;;
+          1:m)  __gs_event raise mouse-middle-up ;;
+          2:m)  __gs_event raise mouse-right-up ;;
+          35:M) __gs_event raise mouse-move ;;
+        esac
+      elif [[ "$key" == $'\003' ]]; then
+        __gs_errormsg "Game exited improperly with ^C"
+        __gs_errormsg "Open game menu with ESC to exit"
+        return 1
+      elif [[ -n "${GS_KEYBOARD_BINDS[$key]+_}" ]]; then
+        local arg
+        [[ $key == $'\E' ]] && arg="-f" # always full recursion for pause
+        __gs_event raise $arg "${GS_KEYBOARD_BINDS[$key]}"
+      fi
+      return 0
     ;;
   esac
 }
 
+#TODO: bind mouse-move as full recursion event?
 __gs_mouse() {
   local action="$1"
   __gs_required_args action || return 2
@@ -88,7 +189,7 @@ __gs_mouse() {
 
       # Tell terminal to stop printing mouse events
       printf '\e[?1003;1006l' >&"$GS_KEYBOARD_FD"
-      unset GS_MOUSE_ENABLED
+      __gs_unset_vars_from_prefixes GS_MOUSE_
     ;;
   esac
 }

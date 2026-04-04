@@ -8,17 +8,17 @@ from flask import (
     render_template,
     Response
 )
-from jinja2 import (
-    TemplateNotFound
-)
+from jinja2 import TemplateNotFound
 
 from imports import config
 from imports.games import GAME_LIST
 
+#TODO: Default man page for games
+#TODO: big one... add fxn for this: man pages in game dirs (submodules)
 CONFIG = config.load_config(config.SERVER_CONFIG)
 MAN_DIR = "man"
 
-bp = Blueprint("man", __name__, url_prefix="/man")
+bp = Blueprint("man", __name__, url_prefix="/man", template_folder="../man")
 
 @bp.route("/<name>.1")
 def man(name):
@@ -80,5 +80,14 @@ def man_index():
             "name": name,
             "html_url": f"/man/{name}",
         })
+    try:
+        resp = render_template(
+            "man_index.html",
+            pages=pages,
+            html=True
+        )
+    except TemplateNotFound:
+        abort(404)
 
-    return render_template("man_index.html", pages=pages)
+    return resp
+
