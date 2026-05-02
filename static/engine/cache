@@ -74,7 +74,7 @@ __gs_cache() {
       command rm -f "$spriteGz"
 
       # Need sprite function to cache sprites in env
-      __gs_required_fxn __gs_sprite || return 1
+      __gs_required_fxns __gs_sprite || return 1
 
       # Set up sprite env
       __gs_sprite setup

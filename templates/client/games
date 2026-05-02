@@ -20,7 +20,16 @@ GS_GAME_LIST="{{ game_list | map(attribute='cmd_name') | list | join(' ') }}"
 
 {% for game in game_list %}
 {{ game.cmd_name }}() {
-  __gs_infomsg "Loading latest version of {{ game.cmd_name }} from server..."
+  local opt OPTIND OPTARG logger=__gs_infomsg
+  while getopts ':q' opt; do
+    case "$opt" in
+      q) logger=__gs_debugmsg ;;
+      *) ((OPTIND--)); break ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  $logger "Loading latest version of {{ game.cmd_name }} from server..."
   unset -f {{ game.cmd_name }} # Unset placeholder function (this)
   __gs_source_games {{ game.source_name }} # Set up real function
   command -v {{ game.cmd_name }} &>/dev/null && {{ game.cmd_name }} $@

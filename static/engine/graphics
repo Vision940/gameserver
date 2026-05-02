@@ -19,7 +19,7 @@ __gs_render() {
   local currScene=$REPLY
 
   # Render current scene
-  __gs_required_fxn __gs_${game}_${currScene} || return 1
+  __gs_required_fxns __gs_${game}_${currScene} || return 1
   __gs_${game}_${currScene} render || return 1
 
   # Print frame to screen

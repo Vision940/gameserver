@@ -40,7 +40,7 @@ __gs_popup_menu() {
       # Draw static sprites to default frame on load
       __gs_sprite draw "$id"
       local labelLen="${#label}"
-      __gs_text "$(( x0 + w / 2 - labelLen / 2 - labelLen % 2 ))" "$(( y0 + 1 ))" "$label"
+      __gs_text "$(( x0 + w / 2 - labelLen / 2 ))" "$(( y0 + 1 ))" "$label"
       __gs_frame save-def
 
       # Init button manager

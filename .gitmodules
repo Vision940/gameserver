@@ -1,3 +1,6 @@
 [submodule "static/client/sources/cmdenv"]
 	path = static/client/sources/cmdenv
 	url = git@github.com:Vision940/cmdenv.git
+[submodule "static/games/boom"]
+	path = static/games/boom
+	url = git@github.com:Vision940/boom.git

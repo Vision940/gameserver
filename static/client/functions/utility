@@ -13,8 +13,8 @@
 ##       -q  don't log non-existence
 ##     otherwise, prints error saying required arg ARG not set in fxn
 ##     returns non-zero on first ARG unset
-##   __gs_required_fxn FXN-NAME
-##     checks for function FXN-NAME in env and returns non-zero with
+##   __gs_required_fxns [FXN-NAME FXN-NAME ...]
+##     checks for each function FXN-NAME in env and returns non-zero with
 ##       error msg if missing
 ##   __gs_trap_check SIGNAL
 ##     function to check if SIGNAL is a trap in the current env
@@ -67,13 +67,15 @@ __gs_required_args() {
   return 0
 }
 
-__gs_required_fxn() {
-  local fxnName="$1"
-  __gs_required_args fxnName || return 2
-  declare -f "$fxnName" &>/dev/null || {
-    __gs_errormsg "Missing $fxnName function required to ${FUNCNAME[1]}"
-    return 1
-  }
+__gs_required_fxns() {
+  local fxnName
+  for fxnName in $@; do
+    declare -f "$fxnName" &>/dev/null || {
+      __gs_errormsg "Missing $fxnName function required to ${FUNCNAME[1]}"
+      return 1
+    }
+  done
+
   return 0
 }
 

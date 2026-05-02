@@ -146,7 +146,8 @@ __gs_keyboard() {
         local y=${BASH_REMATCH[3]}
         local final=${BASH_REMATCH[4]}
 
-        GS_MOUSE_POS="${x},${y}"
+        # y - 1 because want the point of the mouse
+        GS_MOUSE_POS="${x},$(( y - 1 ))"
 
         case "${code}:${final}" in
           0:M)  __gs_event raise mouse-left-down ;;
