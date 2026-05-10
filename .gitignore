@@ -1,4 +1,4 @@
-data/users.json
-data/games/*.json
-__pycache__
+data/
+__pycache__/
 *.spr
+venv/

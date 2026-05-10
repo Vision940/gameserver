@@ -1,0 +1,11 @@
+CONTAINER_RUNTIME="sudo docker"
+
+POSTGRES_IMAGE=postgres:18.3
+POSTGRES_DB=gameserver
+POSTGRES_USER=gameserver_user
+POSTGRES_PASSWORD=gsuser
+POSTGRES_PORT=5432
+
+SECRET_KEY=devserver
+SERVER_CONFIG=data/dev-config.json
+

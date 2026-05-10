@@ -16,7 +16,8 @@
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
-GS_GAME_LIST="{{ game_list | map(attribute='cmd_name') | list | join(' ') }}"
+GS_GAME_CMDS="{{ game_list | map(attribute='cmd_name') | list | join(' ') }}"
+GS_GAME_SOURCES="{{ game_list | map(attribute='source_name') | list | join(' ') }}"
 
 {% for game in game_list %}
 {{ game.cmd_name }}() {

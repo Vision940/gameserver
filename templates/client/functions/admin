@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+
+## templates/client/functions/admin ##
+## Client side admin function provider
+##
+## This file provides different functionality depending on user's admin status
+##
+## The admin-side functionality provided here is validated by the server on
+##   each call even if a non-admin user somehow sources the admin version
+##
+## Functions:
+##   __gs_admininfo
+##     displays list of admins on the server rendered from server config
+##   __gs_admin ACTION
+##     this is called when `game admin` is run
+##     acts as a caller for __gs_admininfo when not an admin
+##     executes ACTION when called by an admin
+##     accepted values for ACTION:
+##       ban ID - ban user with ID
+##       info (default) - run __gs_admininfo
+##       requests OPT
+##         view (default) - view all requests
+##         accept ID - accept request for ID
+##         reject ID - reject request for ID
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+#TODO: admin passwd reset for other users
+__gs_admininfo() {
+  local resp
+  resp=$(__gs_curl_post admin/info) || {
+    __gs_errormsg "Unable to retrieve admin list from server"
+    return 1
+  }
+  __gs_infomsg "Admins on this installation are:"
+  __gs_parse_response '.admins | join(", ")' "$resp"
+}
+
+{% if user in admins %}
+__gs_admin() {
+  local action="$1"
+  local resp
+  case _${action}_ in
+    _ban_) : Ban user account
+      local userId="$2"
+      [[ "$userId" =~ ^[0-9]+$ ]] || {
+        __gs_errormsg "Please input numeric user ID to ban"
+        return 1
+      }
+
+      __gs_prompt "Please input reason for ban:" || {
+        __gs_errormsg "Need input reason to continue"
+        return 1
+      }
+      local reason="$REPLY"
+
+      __gs_y_or_n -ws "Banning a user cannot be undone" || return 1
+
+      resp=$(__gs_curl_post admin/ban id $userId reason "$reason") || {
+        __gs_errormsg "Could not ban ID: ${userId:-null}"
+        return 1
+      }
+
+      __gs_json_to_table \
+        -d updated \
+        -j "$resp" \
+        ID:id Username:username Status:status \
+        Banner:banner Reason:banned_reason Time:banned_at
+    ;;
+    _requests_) : Handle account requests
+      case _requests_${2}_ in
+        _requests_approve_) : Approve account request
+          local reqId="$3"
+          [[ "$reqId" =~ ^[0-9]+$ ]] || {
+            __gs_errormsg "Please input numeric user ID to approve"
+            return 1
+          }
+
+          resp=$(__gs_curl_post admin/approve id $reqId) || {
+            __gs_errormsg "Could not approve ID: ${reqId:-null}"
+            return 1
+          }
+
+          __gs_json_to_table \
+            -d "updated" \
+            -j "$resp" \
+            ID:id Username:username Status:status \
+            Approver:approver Time:approved_at
+        ;;
+        _requests_reject_) : Reject account request
+          local reqId="$3"
+          [[ "$reqId" =~ ^[0-9]+$ ]] || {
+            __gs_errormsg "Please input numeric user ID to reject"
+            return 1
+          }
+
+          __gs_prompt "Please input reason for rejection:" || {
+            __gs_errormsg "Need input reason to continue"
+            return 1
+          }
+          local reason="$REPLY"
+
+          resp=$(__gs_curl_post admin/reject id $reqId reason "$reason") || {
+            __gs_errormsg "Could not reject ID: ${reqId:-null}"
+            return 1
+          }
+
+          __gs_json_to_table \
+            -d updated \
+            -j "$resp" \
+            ID:id Username:username Status:status \
+            Rejector:rejector Reason:rejected_reason Time:rejected_at
+        ;;
+        _requests__) ;&
+        _requests_view_) : View account requests
+          resp=$(__gs_curl_post admin/requests) || {
+            __gs_errormsg "Could not retrieve user request list"
+            return 1
+          }
+
+          __gs_json_to_table \
+            -d requests -a \
+            -j "$resp" \
+            ID:id Username:username Requestor:created_by \
+            "Origin Host:created_on_host" Time:created_at
+        ;;
+        *) __gs_unfound_option "admin requests $2" ;;
+      esac
+    ;;
+    __) ;&
+    _info_) : Print admin info
+      __gs_admininfo
+    ;;
+    *) __gs_unfound_option "admin $1" ;;
+  esac
+}
+__gs_source_template __gs_admin-completion
+{% else %}
+__gs_admin() { __gs_admininfo; }
+__gs_source_template __gs_admin-completion
+{% endif %}
+

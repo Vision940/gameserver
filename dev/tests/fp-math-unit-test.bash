@@ -5,9 +5,7 @@
 
 tl=$(git rev-parse --show-toplevel)
 sources=(${tl}/static/client/functions/{math,logging,utility})
-for s in ${sources[@]}; do
-  source $s
-done
+for s in ${sources[@]}; do source $s; done
 
 echo "Unit test for static/client/functions/math started"
 

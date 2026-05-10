@@ -30,12 +30,12 @@ __gs_userctl_cleanup() {
 __gs_passwd_prompt() {
   local password hashedPassword
   read -rs -t 10 -p "$(__gs_infomsg "Please enter ${1:+$1 }password: " "-n")" password
-  [[ $? -gt 128 ]] &&
+  (( $? > 128 )) &&
     { __gs_errormsg "Timed out"; return 1; }
 
   [[ -z "$password" ]] &&
     { __gs_errormsg "Password cannot be empty."; return 2; }
-  hashedPassword=$(openssl dgst -sha256 <<<"$password" | awk '{print $2}')
+  hashedPassword=$(awk '{print $2}' <(openssl dgst -sha256 <<<"$password"))
   unset password
 
   echo $hashedPassword
@@ -43,9 +43,12 @@ __gs_passwd_prompt() {
 
 __gs_set_passwd() {
   __gs_infomsg "Setting user password for $GS_USER..."
-  local setPasswd=$(__gs_curl_post passwd password $1) || return 1
+  local setPasswd
+  setPasswd=$(__gs_curl_post passwd password $1) || return 1
   if __gs_response_valid "$setPasswd"; then
-    GS_API_KEY=$(__gs_parse_response ".key" "$setPasswd") || return 1
+    local key
+    key=$(__gs_parse_response ".key" "$setPasswd") || return 1
+    __gs_api_key save "$key" || __gs_debugmsg "Could not save api key for $GS_USER"
     __gs_infomsg "Successfully logged in $GS_USER!"
   else
     __gs_errormsg "Error setting password. Please try again or contact an administrator for assistance."

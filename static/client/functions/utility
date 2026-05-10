@@ -27,6 +27,8 @@
 ##   __gs_unset_vars_from_prefixes PREFIX [PREFIX ...]
 ##     find all vars in env starting with each PREFIX and unset them all
 ##     useful to clean up env after function runs
+##   __gs_unset_funcs_from_prefixes PREFIX [PREFIX ...]
+##     find all funcs in env starting with each PREFIX and unset them all
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -117,5 +119,14 @@ __gs_unset_vars_from_prefixes() {
   done
 }
 
-#TODO: Unset funcs from prefixes
+__gs_unset_funcs_from_prefixes() {
+  (($#)) || return 2
+
+  local prefix name
+  for prefix in $@; do
+    while IFS= read -r name; do
+      unset -f "$name"
+    done < <(compgen -A function "$prefix")
+  done
+}
 

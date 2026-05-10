@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+
+## static/client/functions/output ##
+## Provides functions to consistently output information to the terminal
+##
+## Functions:
+##   __gs_json_to_table [-a] -d DATA -j JSON HEADER:KEY HEADER:KEY ...
+##     function that takes a json object or array of objects named DATA
+##       from a JSON response and formats the given KEYs into a table
+##       with provided HEADERs in the provided order
+##     for example, a json response like this:
+##       { "valid": true, "object": { "id": 1, "user": "username" } }
+##     could be converted to an output table with this call:
+##       __gs_json_to_table -d object \
+##         -j { "valid": true, "object": { "id": 1, "user": "username" } } \
+##         ID:id User:user
+##     the -a argument treats the provided DATA as an array of objects to jq,
+##       so jq would be called with (DATA[] | [.KEY, .KEY ...]) rather than
+##       just DATA
+##     the intended use case for this function is to consistently, prettily
+##       format json response data for gs commands that interact with the db
+##       through flask
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_json_to_table() {
+  local array="" data="" resp=""
+  local opt OPTIND OPTARG
+  while getopts 'ad:j:' opt; do
+    case "$opt" in
+      a) array="[]" ;;
+      d) data="$OPTARG" ;;
+      j) json="$OPTARG" ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  # Check usage
+  __gs_required_args json data
+  (($#)) || {
+    __gs_errormsg "No columns supplied to $FUNCNAME"
+    return 1
+  }
+
+  # Set up headers and columns from input "Column Name:dataName" format
+  local headers="" columns=""
+  local col header colData trash
+  for col in "$@"; do
+    IFS=":" read -r header colData trash <<<"$col"
+    headers="${headers:+"$headers,$header"}"
+    headers="${headers:-$header}"
+    columns="${columns:+"$columns, .$colData"}"
+    columns="${columns:-.$colData}"
+  done
+
+  # Parse response from server into rows of data
+  local tableData
+  tableData=$(__gs_parse_response "(.${data}${array} | [$columns]) | @tsv" "$json") || return 1
+
+  # Sort table by first column, numerically if id is first
+  sortArgs="-f -k 1"
+  [[ "$columns" =~ ^".id" ]] && sortArgs+=" -n"
+  tableData=$(sort $sortArgs <<<"$tableData") || {
+    __gs_errormsg "Unable to sort output table"
+    return 1
+  }
+
+  # This is fine, we just let the user know
+  [[ -z "$tableData" ]] && {
+    __gs_infomsg "No data to display for ${data}$array"
+    return 0
+  }
+
+  # Format and add headers
+  tableData="$(column -t -N "$headers" -s $'\t' <<<"$tableData")" || {
+    __gs_errormsg "Unable to format output table"
+    return 1
+  }
+
+  local longest len
+  while read -r line; do
+    len=${#line}
+    (( longest < len )) && longest=$len
+  done <<<"$tableData"
+  longest=$(( longest + 4 ))
+
+  local colors=($'\e[0m' $'\e[48;2;88;88;88m')
+  local reset=$'\e[0m'
+  local idx=0
+  while read -r line; do
+    printf "%s" "${colors[$((idx % 2))]}"
+    printf "%-*s" "$longest" "  $line"
+    printf "%s\n" "$reset"
+    ((idx++))
+  done <<<"$tableData"
+}
+

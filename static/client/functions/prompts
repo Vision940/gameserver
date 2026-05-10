@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+## static/client/functions/prompts ##
+## Provides functions relating to user input prompting
+##
+## Functions:
+##   __gs_prompt PROMPT
+##     function that calls read with "PROMPT " and sets REPLY to input result
+##   __gs_y_or_n OPTS PROMPT
+##     function that prompts user for yes/no and returns 0 if yes
+##     appends " [y/N]" to input PROMPT after suffixes
+##     accepts an ever-expanding list of fun ways to say yes as an easter egg
+##     valid OPTS:
+##       -c: append  " -- continue?" to PROMPT
+##       -r: append  " -- look right?" to PROMPT
+##       -s: append  " -- are you sure?" to PROMPT
+##       -w: prepend "[WARNING] " to PROMPT
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__gs_prompt() {
+  read -r -t 10 -p "$@ " || return
+  [[ -n "$REPLY" ]]
+}
+
+__gs_y_or_n() {
+  local prefix=""
+  local suffix=""
+  local opt OPTIND OPTARG
+  while getopts ':crsw' opt; do
+    case "$opt" in
+      c) suffix=" -- continue?" ;;
+      r) suffix=" -- look right?" ;;
+      s) suffix=" -- are you sure?" ;;
+      w) prefix=$'[\e[1;33mWARNING\e[0m] ' ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  __gs_prompt "$prefix$@$suffix [y/N]" || return 1
+  local resp="$REPLY"
+  [[ " y yes yup fs yerr yeah ya yep yee si evet mhm yuh yessir oui !no !n ofc fosho hai affirmative yah ez ye absolutely " =~ " ${resp,,} " ]]
+}
+
