@@ -39,9 +39,12 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
     return 1
   }
   {% endif %}
+  __gs_longopts "$@" && return
   __gs_setdebug $1 || shift
 
-  if [[ "${GS_API_KEY:-null}" == "null" && "$1" != "login" ]]; then
+  # Refresh api key in case client is out of date
+  __gs_request _apikey_ || return 1
+  if ! __gs_logged_in && [[ "$1" != "login" ]]; then
     __gs_errormsg "Please log in to the game server with \`${FUNCNAME[-1]} login\` to continue."
     __gs_errormsg "If logging in for the first time, input desired password to login prompt."
     return 1

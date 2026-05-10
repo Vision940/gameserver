@@ -3,10 +3,13 @@
 ## templates/client/init ##
 ## Script to init a client to the gameserver
 ##
-## Exports necessary env vars, checks for external deps, and sources game cmd
+## Exports necessary env vars, checks for external deps, and sets up gameinit cmd
 ##
 ## Users access server capabilities with this script by running:
-##   source <(curl -sfL http://<hostname>:<port>/)
+##   source <(curl -sfL SERVER-URL)
+##   gameinit OPTS
+## Alternatively, users can run gameinit on source like so:
+##   source <(curl -sfL SERVER-URL) OPTS
 ##
 ## Functions:
 ##   __gs_source_file PATH ROUTE
@@ -14,6 +17,12 @@
 ##     default ROUTE is static/client
 ##   __gs_deps_check
 ##     function that runs one time on init source to check gameserver dependencies
+##   gameinit
+##     function to source game command after init script sourced
+##     automatically runs on source if $@ is populated
+##     functionizing game command init is beneficial because it:
+##       adds layer of confirmation from new users sourcing this script
+##       allows retry of init if init fails for whatever reason or if opts wrong
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -59,22 +68,116 @@ __gs_deps_check() {
     fi
   done
 }
-__gs_deps_check || return
+__gs_deps_check || return 1
 
+# These are set from server config
 export GS_HOST="{{ host }}"
 export GS_PORT="{{ port }}"
-export GS_URL="http://$GS_HOST:$GS_PORT"
 export GS_SERVER_API_VER="{{ server_ver }}"
+export GS_URL="http://$GS_HOST:$GS_PORT"
 
-# __gs_source_file PATH ROUTE
+# These dir variables are available to games that want persistent data state
+#   across client sessions in source location
+# Games should not expect these directories to house important information,
+#   as users can log in from different homes/machines/usernames
+export GS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}/gameserver"
+export GS_DATA_DIR="${XDG_DATA_HOME:-${HOME:-/tmp}/.local/share}/gameserver"
+export GS_AUTH_FILE="$GS_DATA_DIR/auth.txt"
+
 __gs_source_file() {
   local serverPath=${2:-static/client}
   declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Sourcing $1..."
-  source <(curl -sfL "$GS_URL/$serverPath/$1")
+  source <(curl -sfL "$GS_URL/$serverPath/$1") || {
+    declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Could not source $1"
+    return 1
+  }
 }
 
-# Prioritize id and whoami to avoid impersonation
-export GS_USER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
-__gs_source_file game
-export GS_API_KEY=$(__gs_request _apikey_)
+gameinit() {
+  __gs_source_file functions/docs
+  __gs_longopts "$@" && return
+
+  # Prioritize id and whoami to avoid impersonation
+  export GS_CURUSER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
+
+  local create=
+  export GS_USER=$GS_CURUSER
+  local opt OPTIND OPTARG
+  while getopts 'cu:' opt; do
+    case "$opt" in
+      c) create=true ;;
+      u) GS_USER=$OPTARG ;;
+      *) __gs_errormsg "Unrecognized option to $FUNCNAME"; return 2 ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
+  # Create data/config dirs
+  for dir in "$GS_CONFIG_DIR" "$GS_DATA_DIR"; do
+    command mkdir -m 755 -p "$dir" &>/dev/null || {
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Could not create directory at $dir." 1>&2
+      return 1
+    }
+    [[ -d "$dir" ]] || {
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Location $dir is not a directory." 1>&2
+      return 1
+    }
+  done
+
+  # Source game command
+  __gs_source_file game || {
+    echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Could not source game command." 1>&2
+    return 1
+  }
+
+  # Load cached key if it exists
+  [[ -r "$GS_AUTH_FILE" ]] && export GS_API_KEY="$(<$GS_AUTH_FILE)"
+
+  # Get user state and set key if able
+  __gs_request _apikey_ $create || {
+    # If api key get fails with return code, user is either banned or invalid
+    # In this case, erase all trace of existence
+    __gs_errormsg "Unrecoverable error on startup" fatal
+    __gs_nuke_client
+    return 1
+  }
+
+  [[ "${FUNCNAME[-1]}" == "gameinit" ]] || return 0
+
+  # Print user state hints if run directly
+  case $GS_USER_STATE in
+    Usernotcreated)
+      __gs_warnmsg "User \"$GS_USER\" does not exist."
+      __gs_warnmsg "Run \`$FUNCNAME -c [-u USERNAME=$GS_CURUSER]\` to create!"
+      unset -f game
+    ;;
+    Userexists)
+      __gs_errormsg "User \"$GS_USER\" already exists."
+      __gs_errormsg "Run without \`-c\` or with a different username to continue!"
+      unset -f game
+    ;;
+    Userrequested)
+      __gs_infomsg "User \"$GS_USER\" has been requested."
+      __gs_infomsg "Check back here with \`$FUNCNAME [-u USERNAME=$GS_CURUSER]\` for approval status!"
+    ;;
+    Userpending)
+      __gs_infomsg "User \"$GS_USER\" has not yet been approved."
+      __gs_infomsg "Contact an admin ({{ admins | join(', ') }}) if it's been a while."
+    ;;
+    Login)
+      __gs_warnmsg "User \"$GS_USER\" requires login."
+    ;;
+    Setpassword)
+      __gs_infomsg "User \"$GS_USER\" has been approved."
+      __gs_infomsg "Run \`game login\` to set a password!"
+    ;;
+  esac
+
+  return 0
+}
+
+(($#)) && {
+  gameinit "$@" || return 1
+}
+return 0
 

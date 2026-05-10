@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+## dev/devserver ##
+## devserver provides a function to start/run/clean a local dev server for
+##   development with a local db and server instance
+##
+## It circumvents the released compose structure by just running a local postgres
+##   container before starting the debug server with the correct env set up
+##
+#TODO: doc function and implement in makefile
+## This script is dumb and meant to be run correctly by make
+## Run `make sprites <game>` at project toplevel to make all sprites relevant to <game>
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+__pg() {
+  # Postgres container handler
+  local runtime="${CONTAINER_RUNTIME?No CONTAINER_RUNTIME in env}"
+  local image="${POSTGRES_IMAGE?No POSTGRES_IMAGE in env}"
+  local tl="${TOPLEVEL?No TOPLEVEL in env}"
+  local contname="${CONTAINER_NAME:-gs-postgres}"
+
+  case _$1_ in
+    _run_)
+      __gs_infomsg "Running Postgres container"
+      $runtime ps --format '{{.Names}}' | grep -qx "$contname" && {
+        __gs_infomsg "Postgres container already running"
+        return 0
+      }
+
+      $runtime run -it -d \
+        --name $contname \
+        -e POSTGRES_DB="$POSTGRES_DB" \
+        -e POSTGRES_USER="$POSTGRES_USER" \
+        -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+        -p "127.0.0.1:${POSTGRES_PORT}:5432" \
+        -v "$tl/data/dev-pgdata:/var/lib/postgresql" \
+        $image || return 1
+
+      __gs_infomsg "Waiting for Postgres..."
+      local i
+      for (( i=0; i<60; i++ )); do
+        if $runtime exec $contname pg_isready \
+          -U "$POSTGRES_USER" \
+          -d "$POSTGRES_DB"; then
+          __gs_infomsg "Postgres is ready"
+          return 0
+        fi
+        sleep 1
+      done
+
+      __gs_errormsg "Postgres did not become ready"
+      return 1
+    ;;
+    _remove_)
+      __gs_infomsg "Removing Postgres container"
+      $runtime rm -f $contname
+    ;;
+  esac
+}
+
+devserver() {
+  TOPLEVEL=$(git rev-parse --show-toplevel) || return 1
+  pushd $TOPLEVEL &>/dev/null
+
+  sources=(static/client/functions/{logging,utility})
+  for s in ${sources[@]}; do source $s; done
+
+  case _$1_ in
+    _run_)
+      __gs_infomsg "Running devserver..."
+      [[ "$2" == "fresh" ]] && $FUNCNAME clean
+      if [[ ! -d venv ]]; then
+        python3 -m venv venv
+        venv/bin/python3 -m pip install -r requirements.txt
+      fi
+      [[ -f "dev/.dev-env" ]] || {
+        __gs_errormsg "dev/.dev-env file not found"
+        popd &>/dev/null
+        return 1
+      }
+      set -a
+      source dev/.dev-env
+      set +a
+      __gs_required_args -n POSTGRES_IMAGE POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT SECRET_KEY || {
+        popd &>/dev/null
+        return 1
+      }
+
+      CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-sudo docker}"
+      for cmd in $CONTAINER_RUNTIME; do
+        command -v $cmd &>/dev/null || {
+          __gs_errormsg "Command not found: $cmd"
+          popd &>/dev/null
+          return 1
+        }
+      done
+      __gs_infomsg "Using \"$CONTAINER_RUNTIME\" for postgres container"
+      command mkdir -p data/dev-pgdata
+
+      __pg run || {
+        popd &>/dev/null
+        return 1
+      }
+
+      export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}"
+      __gs_infomsg "Running dev-install"
+      venv/bin/python3 -m scripts.dev-install
+      __gs_infomsg "Running migrations..."
+      venv/bin/python3 -m scripts.migrate
+      __gs_infomsg "Starting server..."
+      venv/bin/python3 gameserver.py
+    ;;
+    _clean_)
+      __gs_infomsg "Cleaning devserver..."
+      [[ -f "dev/.dev-env" ]] || {
+        __gs_errormsg "dev/.dev-env file not found"
+        popd &>/dev/null
+        return 1
+      }
+      source dev/.dev-env
+      __gs_required_args -n POSTGRES_IMAGE POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT SECRET_KEY || {
+        popd &>/dev/null
+        return 1
+      }
+      __pg remove
+      __gs_infomsg "Removing venv and dev-config.json"
+      command rm -rf venv/
+      command rm -f data/dev-config.json
+      __gs_warnmsg "Running \`sudo rm -rf data/dev-pgdata/\` to remove database"
+      sudo rm -rf data/dev-pgdata/
+    ;;
+    *)
+      __gs_errormsg "No arg provided. Usage: $FUNCNAME (run [fresh]|clean)"
+    ;;
+  esac
+  popd &>/dev/null
+}
+
+if ! ( return 0 2>/dev/null ); then
+  devserver $@
+else
+  (($#)) && devserver $@
+fi
+

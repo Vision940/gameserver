@@ -4,72 +4,129 @@
 ## Provides functions to interact with server
 ##
 ## Functions:
+##   __gs_logged_in
+##     helper function that returns 0 if user is logged in
+##   __gs_api_key ACTION [OPTS]
+##     supported ACTION values and their OPTS:
+##       save KEY: sets raw API key in env and saves to local file for future logins
+##                 returns non-zero if unable to save key to local GS_AUTH_FILE
+##       remove: unsets GS_API_KEY and GS_USER_STATE from env and removes GS_AUTH_FILE
 ##   __gs_json_content [KEY VAL [KEY VAL [...]]]
-##     function that formats input keys/vals as a json string
-##     calling with KEY1 VAL1 KEY2 VAL2 prints '"KEY1": "VAL1", "KEY2": "VAL2"'
+##     function that formats simple input keys/vals as a json string
+##     calling with KEY1 VAL1 KEY2 VAL2 prints '{"KEY1":"VAL1","KEY2":"VAL2"}'
+##     simple json output is nestable with VAL=$(__gs_json_content [KEY VAL [...]])
 ##   __gs_curl_post ROUTE [KEY VAL [KEY VAL [...]]]
-##     function that curls server with POST request to URL/ROUTE
+##     function that curls server with POST request to GS_URL/ROUTE
 ##     uses KEY/VAL pairs entered to call __gs_json_content and adds result to msg
-##     by default adds user/key/ver to every message
-##     this function is the preferred way to interact with the server
+##     by default adds user/curuser/host/key/ver to every message
+##     this function is the default way to interact with the server api
+##     prints server response after checking for old api version or key
 ##   __gs_parse_response JQCODE RESP [FILTEROFF]
 ##     function that executes JQCODE on RESP string
 ##     if FILTEROFF is populated, will parse responses without "valid": true
 ##     calls `jq -r "JQCODE" <<<"RESP"` and prints result
-##   __gs_check_version RESP
+##   __gs_check_resp RESP
 ##     parses json RESP string for oldver key found when server api version is old
-##     prints warning and returns 1 if version is old
-##     server will not comply with requests if version is old
+##       or oldkey key found when server api key is bad
+##     prints warning and returns 1 if either is old
+##     server will not comply with requests if client out of compliance with key/version
 ##   __gs_response_valid RESP
 ##     checks json RESP string for '"valid": true'
-##     server should include valid bool flag in every response
+##     server should include valid bool flag in every response except in the /user route
 ##     returns 1 if valid is missing or not true
 ##   __gs_request REQ [OPTS]
-##     function to handle common game requests/responses
+##     function to handle common game request/response routes
 ##     supported REQ values and their OPTS:
-##       _apikey_: gets api key from server if able
+##       _apikey_ [CREATE]: gets api key from server if able
+##                          creates user if CREATE is populated
 ##       _login_ PASSWD: logs in to server and handles possible errors
 ##                       allows users to set password on first login
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
-__gs_json_content() {
-  local arg
-  local jsonContent=""
-
-  if (( $# % 2 == 1 )); then
-    return 1
-  fi
-
-  for (( arg=1 ; arg<=$# ; arg++ )); do
-    if (( arg % 2 == 1 )); then
-      jsonContent+="\"${!arg}\": "
-    else
-      jsonContent+="\"${!arg}\", "
-    fi
-  done
-  echo "${jsonContent%, }"
+__gs_logged_in() {
+  [[ -n "$GS_API_KEY" && "$GS_USER_STATE" == "Loggedin" ]]
 }
 
-# __gs_curl_post ROUTE [KEY VAL [KEY VAL [...]]]
+__gs_api_key() {
+  local action="$1"
+  __gs_required_args action || return 2
+  case _${action}_ in
+    _save_)
+      local key="$2"
+      __gs_required_args key || return 2
+      __gs_required_args -n GS_AUTH_FILE || return 1
+
+      export GS_API_KEY="$key"
+
+      command rm -f "$GS_AUTH_FILE" 2>/dev/null
+      command echo -n "$key" > "$GS_AUTH_FILE" 2>/dev/null
+      command chmod 600 "$GS_AUTH_FILE" 2>/dev/null
+
+      [[ "$(command cat "$GS_AUTH_FILE" 2>/dev/null)" == "$key" ]]
+      return
+    ;;
+    _remove_)
+      __gs_unset_vars_from_prefixes GS_API_KEY GS_USER_STATE
+      [[ -f "$GS_AUTH_FILE" ]] && command rm -f "$GS_AUTH_FILE" 2>/dev/null
+    ;;
+  esac
+}
+
+__gs_json_content() {
+  (( $# % 2 == 1 )) && return 1
+
+  local args=()
+
+  local key val json
+  while (($#)); do
+    key=$1
+    val=$2
+    shift 2
+
+    json=""
+    [[ "$val" =~ ^"{" ]] && json="json"
+    [[ " false true " =~ " $val " ]] && json="json"
+
+    args+=("--arg$json" "$key" "$val")
+  done
+
+  jq -cn "${args[@]}" '$ARGS.named'
+}
+
 __gs_curl_post() {
   local route="$1"
-  local jsonContent=""
 
-  jsonContent="$(__gs_json_content ${@:2})" || return 1
-  # Add these to all messages
-  jsonContent+="${jsonContent:+, }\"user\": \"$GS_USER\", \"key\": \"$GS_API_KEY\", \"ver\": \"$GS_SERVER_API_VER\""
+  # Don't let users trick login before setting password
+  [[ "${GS_API_KEY^^}" == "NULL" ]] && unset GS_API_KEY
 
-  __gs_debugmsg "Requesting $GS_URL/$route with {$jsonContent}" 2
-  __gs_debugmsg "curl -L -m 5 -X POST -H \"Content-Type: application/json\" -d \"{${jsonContent//\"/\\\"}}\" $GS_URL/$route" 3
-  local response=$(curl -sL -m 5 -X POST -H "Content-Type: application/json" -d "{$jsonContent}" $GS_URL/$route)
-  __gs_debugmsg "resp: $response" 2
-  __gs_check_version "$response"
+  # Populate json with defaults and opts
+  local json="$(
+    __gs_json_content "${@:2}" \
+      user "$GS_USER" \
+      curuser "$GS_CURUSER" \
+      host "${HOSTNAME:-$(hostname 2>/dev/null || command cat /etc/hostname 2>/dev/null || echo unknown)}" \
+      key "${GS_API_KEY:-}" \
+      ver "$GS_SERVER_API_VER"
+  )" || return 1
+
+  __gs_debugmsg "Requesting $GS_URL/$route with $json" 5
+
+  local response
+  response=$(
+    curl -sL -m 2 \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -d "$json" \
+      "$GS_URL/$route"
+  ) || return 1
+
+  __gs_debugmsg "resp: $response" 6
+  __gs_check_resp "$response" || return 1
   printf "%s" "$response"
 }
 
-# __gs_parse_response JQCODE RESP [FILTEROFF]
 __gs_parse_response() {
   local keyStr="$1"
   local jsonResp="$2"
@@ -81,52 +138,130 @@ __gs_parse_response() {
   fi
 }
 
-__gs_check_version() {
+__gs_check_resp() {
   local jsonResp="$1"
+
   if jq -e ".oldver == true" <<<"$jsonResp" &>/dev/null; then
-    __gs_errormsg "Old server api version detected."
+    __gs_errormsg "Old server API version detected."
     __gs_errormsg "Please run \`game update\` to get the latest server updates!"
+    return 1
+  fi
+
+  if jq -e ".oldkey == true" <<<"$jsonResp" &>/dev/null; then
+    __gs_errormsg "Invalid server API key."
+    __gs_errormsg "Please run \`game login\` to re-authenticate."
     return 1
   fi
 }
 
 __gs_response_valid() {
   local jsonResp="$1"
-  jq -e ".valid == true" <<<"$jsonResp" &>/dev/null && return 0
-  return 1
+  jq -e ".valid == true" <<<"$jsonResp" &>/dev/null
 }
 
 __gs_request() {
   __gs_debugmsg "Attempting to send $1 request"
+
   case _$1_ in
     __apikey__)
-      local response=$(__gs_curl_post user)
-      __gs_parse_response ".key" "$response"
+      local create="${2:+true}"
+      local response
+      response=$(__gs_curl_post user create "${create:-false}") || return 1
+      local key=$(__gs_parse_response ".key // null" "$response" off)
+      local action=$(__gs_parse_response ".action // null" "$response" off)
+
+      if [[ "$key" != "null" ]]; then
+        export GS_USER_STATE=Loggedin
+        __gs_api_key save "$key" || __gs_debugmsg "Could not save api key for $GS_USER"
+        return 0
+      fi
+
+      __gs_api_key remove
+
+      [[ "action" == "null" ]] && {
+        __gs_debugmsg "API key not returned and action is null"
+        return 1
+      }
+
+      export GS_USER_STATE="${action// }"
+      case $GS_USER_STATE in
+        Usernameinvalid)
+          __gs_errormsg "Invalid username \"$GS_USER\"" fatal
+          return 1
+        ;;
+        Userdisavowed)
+          __gs_errormsg "User \"$GS_USER\" has been banned or rejected" fatal
+          return 1
+        ;;
+        Userexists)
+          __gs_debugmsg "User \"$GS_USER\" already exists"
+        ;;
+        Usernotcreated)
+          __gs_debugmsg "User \"$GS_USER\" does not exist and was not created"
+        ;;
+        Userrequested)
+          __gs_debugmsg "User \"$GS_USER\" does not exist and was requested"
+        ;;
+        Userpending)
+          __gs_debugmsg "User \"$GS_USER\" has not yet been approved"
+        ;;
+        Login)
+          __gs_debugmsg "User \"$GS_USER\" requires login"
+        ;;
+        Setpassword)
+          __gs_debugmsg "User \"$GS_USER\" needs to set a password"
+        ;;
+      esac
     ;;
     __login__)
-      local response=$(__gs_curl_post login password $2) || return 1
+      # Handle user states from _apikey_ call
+      case $GS_USER_STATE in
+        Setpassword)
+          __gs_set_passwd $2
+          return
+        ;;
+        Userrequested|Userpending)
+          __gs_infomsg "Please wait to log in until approved."
+          return 1
+        ;;
+      esac
+
+      local response
+      response=$(__gs_curl_post login password $2) || return 1
+
       if __gs_response_valid "$response"; then
-        GS_API_KEY=$(__gs_parse_response ".key" "$response") || return 1
+        export GS_USER_STATE=Loggedin
+        local key
+        key=$(__gs_parse_response ".key" "$response") || return 1
+        __gs_api_key save "$key" || __gs_debugmsg "Could not save api key for $GS_USER"
+
         __gs_infomsg "Successfully logged in $GS_USER!"
         return 0
-      else
-        local action=$(__gs_parse_response ".action" "$response" off) || return 1
-        __gs_debugmsg "Action needed: $action"
-        case "${action// /}" in
-          Setpassword)
-            __gs_set_passwd $2 || return 1
-          ;;
-          Retrypassword)
-            __gs_errormsg "Incorrect password to login. Please try again or ask an administrator to reset it."
-          ;;
-          Invaliduser)
-            # Should hopefully never get here
-            __gs_errormsg "User $GS_USER is not a user on the server. Please contact an administrator for assistance." fatal
-          ;;
-        esac
-
-        return 1
       fi
+
+      local action
+      action=$(__gs_parse_response ".action" "$response" off) || return 1
+      __gs_debugmsg "Action needed: $action"
+
+      GS_USER_STATE="${action// }"
+      case $GS_USER_STATE in
+        Retrypassword)
+          #TODO: Admin password reset
+          __gs_errormsg "Incorrect password to login. Please try again or ask an administrator to reset it."
+        ;;
+        Invaliduser)
+          # Should hopefully never get here
+          __gs_errormsg "User \"$GS_USER\" is not a user on the server. Please contact an administrator for assistance." fatal
+        ;;
+        Userdisavowed)
+          __gs_errormsg "User \"$GS_USER\" has been banned or rejected" fatal
+          __gs_nuke_client
+        ;;
+        Userpending)
+          __gs_infomsg "Please wait until approved."
+        ;;
+      esac
+      return 1
     ;;
   esac
 }

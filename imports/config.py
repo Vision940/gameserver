@@ -1,23 +1,29 @@
 import json
+import os
 import sys
 
 from collections import namedtuple
 
 from imports import json
 
-Config = namedtuple('Config', ['host', 'port'])
+Config = namedtuple('Config', ['host', 'port', 'admins'])
 
-SERVER_CONFIG = "config.json"
 
-def load_config(filename):
+def load_config():
     try:
+        filename = os.environ.get("SERVER_CONFIG", "data/config.json")
+        print(f"INFO: Loading server config {filename}")
         cfg = json.load_json(filename)
 
-        for value in ["host", "port"]:
+        for value in ["host", "port", "admins"]:
             if not cfg.get(value, None):
-                print(f"Error: json config incorrect - missing \"{value}\"")
+                print(f"ERROR: json config incorrect - missing \"{value}\"")
                 sys.exit(2)
-        return Config(cfg.get("host"), cfg.get("port"))
+        return Config(cfg.get("host"), cfg.get("port"), cfg.get("admins"))
     except FileNotFoundError:
-        print(f"Error: could not find config file {filename}")
+        print(f"ERROR: Could not find config file {filename}")
         sys.exit(2)
+
+
+SERVER_CONFIG = load_config()
+

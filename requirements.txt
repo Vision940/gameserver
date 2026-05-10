@@ -1,0 +1,6 @@
+Flask
+psycopg
+psycopg_pool
+bcrypt
+waitress
+

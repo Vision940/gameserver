@@ -10,12 +10,11 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
-from imports import config
-from imports.games import GAME_LIST
+from imports.config import SERVER_CONFIG
+from imports.games import GAME_CMDS
 
 #TODO: Default man page for games
 #TODO: big one... add fxn for this: man pages in game dirs (submodules)
-CONFIG = config.load_config(config.SERVER_CONFIG)
 MAN_DIR = "man"
 
 bp = Blueprint("man", __name__, url_prefix="/man", template_folder="../man")
@@ -25,9 +24,9 @@ def man(name):
     try:
         rendered = render_template(
             f"{name}.1",
-            host=CONFIG.host,
-            port=CONFIG.port,
-            game_list=f"\n{', '.join(GAME_LIST)}"
+            host=SERVER_CONFIG.host,
+            port=SERVER_CONFIG.port,
+            game_list=f"\n{', '.join(GAME_CMDS)}"
         )
     except TemplateNotFound:
         abort(404)
@@ -39,8 +38,8 @@ def man_html(name):
     try:
         roff = render_template(
             f"{name}.1",
-            host=CONFIG.host,
-            port=CONFIG.port,
+            host=SERVER_CONFIG.host,
+            port=SERVER_CONFIG.port,
             html=True
         )
     except TemplateNotFound:

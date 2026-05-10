@@ -34,6 +34,7 @@ done
 unset import __GS_IMPORTS
 
 game() {
+  __gs_longopts "$@" && return
   __gs_setdebug $1 || shift
 
   if [[ "${GS_API_KEY:-null}" == "null" && "$1" != "login" ]]; then
@@ -46,19 +47,34 @@ game() {
     # User-facing functionality
     #TODO: Add load (and a game to load!)
     _login_) : Log into the server
-      [[ -n "$GS_API_KEY" ]] && {
-        __gs_errormsg "You are already logged in";
+      __gs_infomsg "Logging in $GS_USER..."
+      __gs_infomsg "To change users, run \`gameinit -u USERNAME\`"
+
+      # Check if user is already logged in
+      __gs_logged_in && {
+        __gs_errormsg "$GS_USER is already logged in";
         __gs_errormsg "Run \`${FUNCNAME[-1]} logout\` to log out."
-        return;
+        return
       }
+
+      # Try to refresh api key if client is out of date
+      __gs_request _apikey_ || return 1
+      __gs_logged_in && {
+        __gs_infomsg "Successfully logged in $GS_USER!"
+        return 0
+      }
+
       __gs_source_file functions/userctl || return 1
 
+      # Get password
       local hashedPassword
       hashedPassword=$(__gs_passwd_prompt) || { __gs_userctl_cleanup; return 1; }
       echo
 
-      __gs_request _login_ $hashedPassword || { __gs_userctl_cleanup; return 1; }
+      # Login with password
+      __gs_request _login_ "$hashedPassword" || { __gs_userctl_cleanup; return 1; }
 
+      # Cleanup
       __gs_userctl_cleanup
     ;;
     _passwd_) : Change server password
@@ -71,7 +87,7 @@ game() {
       echo
 
       __gs_request _login_ $hashedPassword || { __gs_userctl_cleanup; return 1; }
-      if [[ -n "$GS_API_KEY" ]]; then
+      if __gs_logged_in; then
         hashedPassword=$(__gs_passwd_prompt new) || { __gs_userctl_cleanup; return 1; }
         echo
         __gs_set_passwd $hashedPassword || { __gs_userctl_cleanup; return 1; }
@@ -82,8 +98,7 @@ game() {
       __gs_userctl_cleanup
     ;;
     _logout_) : Log out of the server
-      # It's kind of dumb to make this an option but it could also make sense later
-      unset GS_API_KEY
+      __gs_api_key remove
       __gs_infomsg "Successfully logged out $GS_USER!"
     ;;
     _update_) : Get latest version of game

@@ -1,3 +1,4 @@
+import importlib
 import os
 import tarfile
 import tempfile
@@ -12,24 +13,49 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
-from imports import config
 from imports.game_objs import Game
 
 
 ## Globals ##
-CONFIG = config.load_config(config.SERVER_CONFIG)
-GAME_LIST = [Game(game).source_name for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
+GAME_LIST = [Game(game) for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
+GAME_CMDS = [game.cmd_name for game in GAME_LIST]
+GAME_SOURCES = [game.source_name for game in GAME_LIST]
 
 bp = Blueprint("games", __name__, url_prefix="/games")
 
 
-## Functions ##
+## Initializer ##
+def import_game_bps(app):
+    """
+    Function to dynamically import game route blueprints
+    Called from main app on startup
+    """
+
+    for game_dir in os.listdir('static/games'):
+        bp_dir = f'static/games/{game_dir}'
+
+        if not os.path.isdir(bp_dir):
+            continue
+
+        for filename in os.listdir(bp_dir):
+            if filename.endswith('.py') and filename != '__init__.py':
+                module_name = f'{bp_dir.replace("/", ".")}.{filename[:-3]}'
+                module = importlib.import_module(module_name)
+
+                # Find blueprint object within module and add
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if isinstance(attr, Blueprint):
+                        app.register_blueprint(attr)
+
+
+## Routes ##
 @bp.route('/')
 def games():
     try:
         script = render_template(
             "client/games",
-            game_list=[Game(game) for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
+            game_list=GAME_LIST
         )
     except TemplateNotFound:
         abort(404)
@@ -39,7 +65,7 @@ def games():
 
 @bp.route('/<name>')
 def game_name(name):
-    if name not in GAME_LIST:
+    if name not in GAME_SOURCES:
         abort(404)
 
     game_obj = Game(name)
@@ -56,7 +82,7 @@ def game_name(name):
 
 @bp.route('/<name>-utils')
 def game_utils(name):
-    if name not in GAME_LIST:
+    if name not in GAME_SOURCES:
         abort(404)
 
     game_obj = Game(name)
@@ -73,7 +99,7 @@ def game_utils(name):
 
 @bp.route('/<name>-common')
 def game_common(name):
-    if name not in GAME_LIST:
+    if name not in GAME_SOURCES:
         abort(404)
 
     game_obj = Game(name)
@@ -119,7 +145,7 @@ def get_sprites(name):
 
 @bp.route('/<name>-demo')
 def game_demo(name):
-    if name not in GAME_LIST:
+    if name not in GAME_SOURCES:
         abort(404)
 
     # Concatenate all demo templates to one file

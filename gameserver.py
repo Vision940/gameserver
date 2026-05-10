@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
-import importlib
 import signal
-import os
 
 from flask import (
-    Blueprint,
     Flask,
     jsonify,
     render_template,
@@ -13,42 +10,36 @@ from flask import (
     Response
 )
 
-from imports import __version__ as SERVER_API_VER
-from imports import api # api key handling
-from imports import config # server config handling
-from imports import json # json data file handling
-from imports.games import (
-    bp as games_bp,
-    GAME_LIST
-)
-from imports.man import bp as man_bp # man index and html/terminal pages
+from imports import auth # api key / login handling
+from imports import config # server config loader
+from imports import db # db connection handling
+from imports import games # game module handling
+from imports import man # man index and html/terminal pages
+from imports import users # public user functions
 
+# Initialize app
 app = Flask(__name__)
-app.register_blueprint(games_bp)
-app.register_blueprint(man_bp)
 
-# Dynamically import game route blueprints
-for game_dir in os.listdir('static/games'):
-    bp_dir=f'static/games/{game_dir}'
-    for filename in os.listdir(bp_dir):
-        if filename.endswith('.py') and filename != '__init__.py':
-            module_name = f'{bp_dir.replace("/", ".")}.{filename[:-3]}'
-            module = importlib.import_module(module_name)
+# Register import blueprints
+app.register_blueprint(games.bp)
+app.register_blueprint(man.bp)
 
-            # Find blueprint object within module and add
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if isinstance(attr, Blueprint):
-                    app.register_blueprint(attr)
+# Initialize game blueprints
+games.import_game_bps(app)
 
+# Initialize database
+db.init_pool()
 
+# Save SERVER_CONFIG as CONFIG for readability
+CONFIG = config.SERVER_CONFIG
+
+# Set up exit handler
 def handle_exit(*args):
+    db.close_pool()
     raise KeyboardInterrupt()
-
 signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
 
-CONFIG = config.load_config(config.SERVER_CONFIG)
 
 @app.route('/')
 def index():
@@ -56,7 +47,8 @@ def index():
         "client/init",
         host=CONFIG.host,
         port=CONFIG.port,
-        server_ver=api.SERVER_API_VER
+        admins=CONFIG.admins,
+        server_ver=auth.SERVER_API_VER
     )
 
     return Response(script, mimetype="text/plain")
@@ -71,10 +63,11 @@ def completion(name):
     script = render_template(
         "client/completion",
         game=name,
-        game_list=GAME_LIST
+        game_list=games.GAME_CMDS
     )
 
     return Response(script, mimetype="text/plain")
+
 
 ################
 # Login Routes #
@@ -83,52 +76,62 @@ def completion(name):
 @app.route('/user', methods=['POST'])
 def user():
     """
-    The user method is curled in the init script
+    Client curls this during init
 
-    If the user exists and has an inactive key, it erases the key
-    If the user exists and has an active key, it returns the key
-    If the user does not exist, the user is added to users.json
+    If the user exists and gives invalid key, returns no key
+    If the user exists and gives valid key, returns the key
+    If the user does not exist and create is true, the user is created w/o password
     """
 
-    data, resp = api.validate_api_req(request)
-    if resp:
-        return resp
+    data, resp = auth.validate_api_req(request, key_check=False)
+    if resp: return resp
 
-    username = data.get("user")
+    username = data.get('user')
+    cur_user = data.get('curuser')
+    host = data.get('host')
+    api_key = data.get('key')
+    create = data.get('create', False)
 
-    users = json.load_users()
+    # Initial username filter
+    if not username or any(char.isspace() for char in username):
+        return jsonify(valid=False, action="Username invalid", user=None), 403
 
-    if username in users:
-        # No need to create user if exists
-        user_info = users[username]
+    # Retrieve user info
+    user_info = auth.get_user_auth(username)
 
-        # If password not set up, don't generate key
-        if not user_info.get("password_hash"):
-            return jsonify(valid=True, key=None, expires=0, user=username), 200
+    # Create user if not in db and create flag provided
+    if create and not user_info:
+        users.create_user(username, cur_user, host)
+        return jsonify(action="User requested", user=username), 200
 
-        api_key = user_info["api_key"]
-        expr = user_info["api_key_expires"]
+    # User exists but create requested
+    if create and user_info and users.user_approved(user_info):
+        return jsonify(action="User exists", user=username), 409
 
-        valid, _ = api.validate_key(api_key)
-        if not valid:
-            user_info["api_key"] = api_key = None
-            user_info["api_key_expires"] = expr = 0
-            json.save_users(users)
+    # User needs to be created
+    if not user_info:
+        return jsonify(action="User not created", user=username), 404
 
-        return jsonify(valid=True, key=api_key, expires=expr, user=username), 200
+    # No banned or rejected users
+    if users.user_banned_or_rejected(user_info):
+        return jsonify(action="User disavowed", user=username), 403
 
-    if username and " " not in username and username != "null":
-        users[username] = {
-            "password_hash": None,
-            "api_key": None,
-            "api_key_expires": 0
-        }
-    else:
-        return jsonify(valid=False, key=None, expires=0, user=None), 403
+    # Users must be approved
+    if not users.user_approved(user_info):
+        return jsonify(action="User pending", user=username), 403
 
-    json.save_users(users)
+    # Return set password
+    if not user_info.get('password_hash'):
+        return jsonify(action="Set password", user=username), 401
 
-    return jsonify(valid=True, key=None, expires=0, user=username), 200
+    # Validate provided key
+    active = auth.validate_key(username, api_key)
+    if active and api_key:
+        return jsonify(key=api_key, user=username), 200
+
+    # Return login required
+    return jsonify(user=username, action="Login"), 401
+
 
 @app.route('/passwd', methods=['POST'])
 def passwd():
@@ -138,64 +141,70 @@ def passwd():
     Password can only be reset for user if api key is valid
     """
 
-    data, resp = api.validate_api_req(request)
-    if resp:
-        return resp
+    data, resp = auth.validate_api_req(request)
+    if resp: return resp
 
-    password  = data.get('password')
-    username  = data.get('user')
-    api_key   = data.get('key')
+    password = data.get('password')
+    username = data.get('user')
+    api_key  = data.get('key')
 
-    users = json.load_users()
+    if not username or not password:
+        return jsonify(valid=False, user=username), 400
 
-    if username in users:
-        user_info = users[username]
-        active, usern = api.validate_key(api_key)
+    # Retrieve user info
+    user_info = auth.get_user_auth(username)
+    if not user_info:
+        return jsonify(valid=False, user=username), 404
 
-        if not user_info["password_hash"] or (active and username == usern):
-            user_info["password_hash"] = api.hash_password(password)
-            key, expr = api.generate_api_key()
-            user_info["api_key"] = key
-            user_info["api_key_expires"] = expr
-            json.save_users(users)
+    # Check if user banned or rejected
+    if users.user_banned_or_rejected(user_info):
+        return jsonify(valid=False, user=username), 403
 
-            return jsonify(valid=True, key=api_key, expires=expr, user=username), 200
+    # Validate api key - True if password unset
+    active = auth.validate_key(username, api_key)
 
-    return jsonify(valid=False, user=username), 400
+    # Change password only if unset or api key active
+    if active:
+        # Delete all keys for user
+        auth.cleanup_api_keys(unused_days=0, username=username)
+        # Set password
+        auth.set_password(username, password)
+        # Get key
+        key = auth.create_api_key(username)
+
+        return jsonify(valid=True, key=key, user=username), 200
+
+    return jsonify(valid=False, user=username), 401
+
 
 @app.route('/login', methods=['POST'])
 def login():
-    data, resp = api.validate_api_req(request)
-    if resp:
-        return resp
+    data, resp = auth.validate_api_req(request, key_check=False)
+    if resp: return resp
 
     password = data.get('password')
     username = data.get('user')
 
-    users = json.load_users()
+    # Check user existence
+    user_info = auth.get_user_auth(username)
+    if not user_info:
+        return jsonify(valid=False, action="Invalid user", user=username), 401
 
-    if username in users:
-        user_info = users[username]
-        if not user_info["password_hash"]:
-            return jsonify(valid=False, action="Set password", user=username), 403
+    # Check if user banned or rejected
+    if users.user_banned_or_rejected(user_info):
+        return jsonify(valid=False, action="User disavowed", user=username), 403
 
-        if not api.verify_password(password, user_info["password_hash"]):
-            return jsonify(valid=False, action="Retry password", user=username), 401
+    if not users.user_approved(user_info):
+        return jsonify(valid=False, action="User pending", user=username), 403
 
-        # Only regenerate key if inactive
-        key = user_info["api_key"]
-        expr = user_info["api_key_expires"]
+    # Check password is correct
+    if not auth.verify_password(password, user_info['password_hash']):
+        return jsonify(valid=False, action="Retry password", user=username), 401
 
-        active, _ = api.validate_key(user_info["api_key"])
-        if not active:
-            key, expr = api.generate_api_key()
-            user_info["api_key"] = key
-            user_info["api_key_expires"] = expr
-            json.save_users(users)
+    # Get and return new api key
+    key = auth.create_api_key(username)
+    return jsonify(valid=True, key=key, user=username), 200
 
-        return jsonify(valid=True, key=key, expires=expr, user=username), 200
-
-    return jsonify(valid=False, action="Invalid user", user=username), 401
 
 ########
 # Main #

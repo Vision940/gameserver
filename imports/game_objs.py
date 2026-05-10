@@ -14,11 +14,12 @@ class Game:
 
         # Basic game info
         self.version = cfg.get("version", "")
-        self.min_bash = cfg.get("min_bash", None)
+        self.min_bash = cfg.get("min_bash", "4.2")
         self.cmd_name = cfg.get("cmd_name", name)
         self.full_name = cfg.get("full_name", "")
         self.imports = [imp.replace("GAME", name) for imp in cfg.get("imports", [])]
         self.source_name = name
+        self.has_migrations = cfg.get("db_migrations", False)
 
         # Support unconventional games
         self.has_main = cfg.get("has_main", True)

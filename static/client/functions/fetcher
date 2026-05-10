@@ -11,13 +11,15 @@
 ##   __gs_module_selfdestruct MODULE ROUTE
 ##     function to dynamically unset all functions provided by MODULE at ROUTE on server
 ##     default ROUTE is static/client
+##   __gs_nuke_client
+##     unsets as many gs-related functions and variables on the server as possible
+##     mostly used to prevent banned users from access to server capabilities
 ##
 ##   __gs_source_file isn't here because it is needed in init
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
-# __gs_source_template PATH
 __gs_source_template() {
   __gs_source_file "$1" templates
 }
@@ -26,10 +28,16 @@ __gs_source_games() {
   __gs_source_file "$1" games
 }
 
-# __gs_module_selfdestruct MODULE ROUTE
 __gs_module_selfdestruct() {
   local serverPath=${2:-static/client}
   local fxns="$(sed -ne 's/^\(__gs_[^(]\+\)() {$/\1/p' <(curl -sfL $GS_URL/$serverPath/$1))"
   unset -f $fxns
+}
+
+__gs_nuke_client() {
+    local list=($GS_GAME_CMDS $GS_GAME_SOURCES)
+    __gs_unset_funcs_from_prefixes game "${list[@]}" "${list[@]/#/__}"
+    __gs_unset_vars_from_prefixes GS_
+    __gs_unset_funcs_from_prefixes __gs
 }
 

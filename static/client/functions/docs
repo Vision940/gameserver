@@ -6,12 +6,20 @@
 ## Functions:
 ##   __gs_doccer
 ##     function that opens server man page from URL/man/CALLER.1
+##   __gs_longopts OPTS
+##     function to allow compatibility with -h|--help and --version convention
+##     call at beginning of user-facing function as `__gs_longopts "$@" && return`
+##     for games with more to add to the copyright line, set GS_<GAME>_COPYRIGHT
+##       and it will be added to `<GAME> --version`
+##     the version string used is stored in GS_<GAME>_VERSION, but defaults to
+##       GS_SERVER_API_VER as set in initial source if <GAME> version unset/null
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
 __gs_doccer() {
-  local caller=${FUNCNAME[-1]}
+  # Pre-4.2 need to call with caller name bc no negative indexing
+  local caller=${1:-${FUNCNAME[-1]}}
   local manpage
   manpage="$(curl -sfL "$GS_URL/man/${caller}.1")" || {
     __gs_errormsg "Could not open man page for $caller"
@@ -22,5 +30,47 @@ __gs_doccer() {
     __gs_errormsg "Could not render man page for $caller"
     return 1
   }
+}
+
+__gs_longopts() {
+  # Get length of FUNCNAME to support pre-4.2
+  # This is so a theoretical pre-4.2 cmd line game could still call __gs_longopts
+  local funcStackLastIdx=$((${#FUNCNAME[@]}-1))
+  local caller=${FUNCNAME[$funcStackLastIdx]}
+  local verVar="GS_${caller^^}_VERSION"
+  local version="${!verVar:-$GS_SERVER_API_VER}"
+  local copyrightVar="GS_${caller^^}_COPYRIGHT"
+  local parsed
+  parsed=$(getopt -aU -o h -l help,version -n "$caller" -- "$@" 2>/dev/null) || {
+    local params=" $* "
+    if [[ "$params" =~ " "(--version|--help|-h)" " ]]; then
+      parsed="${BASH_REMATCH[1]}" 2>/dev/null || return 1
+    else
+      return 1
+    fi
+  }
+
+  eval "set -- $parsed"
+  while (($#)); do
+    case $1 in
+      '--version')
+        cat <<- EOF
+					$caller (gameserver) v$version
+					Copyright (C) 2026 Daniel Tucker <github.com/Vision940>
+					${!copyrightVar:+${!copyrightVar}
+          }
+					License MIT
+				EOF
+        return 0
+      ;;
+      '-h'|'--help')
+        __gs_doccer $caller
+        return 0
+      ;;
+      '--') break ;;
+    esac
+    shift
+  done
+  return 1
 }
 
