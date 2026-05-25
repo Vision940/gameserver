@@ -70,6 +70,16 @@ def completion(name):
     return Response(script, mimetype="text/plain")
 
 
+@app.route('/templates/<name>-alias-completion')
+def alias_completion(name):
+    script = render_template(
+        "client/alias-completion",
+        alias=name
+    )
+
+    return Response(script, mimetype="text/plain")
+
+
 #TODO: Log user events to user log for server
 ################
 # Login Routes #

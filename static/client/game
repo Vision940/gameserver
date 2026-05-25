@@ -9,9 +9,11 @@
 ##   tput - tput wrapper to speed up drawing in all games using ANSI esc codes
 ##   docs - renders man help pages for gameserver suite
 ##   fetcher - functions to fetch code from server
+##   logging - functions that enable consistent info/warn/debug/error messages server-wide
 ##   math - functions to enable floating point arithmetic using bash builtins
 ##   messenger - functions to enable server messaging for logins/version checking/api keys
-##   logging - functions that enable consistent info/warn/debug/error messages server-wide
+##   output - functions to pretty print common server output types
+##   prompts - functions to simplify cmd line user prompting
 ##   utility - functions to simplify other functions
 ##
 ## Functions:
@@ -49,7 +51,6 @@ game() {
   local resp
   case _$1_ in
     # User-facing functionality
-    #TODO: Add load (and a game to load!)
     _account_) : View account info
       resp=$(__gs_curl_post whoami) || return 1
       __gs_json_to_table \
@@ -95,6 +96,10 @@ game() {
       # Cleanup
       __gs_userctl_cleanup
     ;;
+    _logout_) : Log out of the server
+      __gs_api_key remove
+      __gs_infomsg "Successfully logged out $GS_USER!"
+    ;;
     _passwd_) : Change server password
       __gs_source_file functions/userctl || return 1
 
@@ -115,15 +120,11 @@ game() {
 
       __gs_userctl_cleanup
     ;;
-    _logout_) : Log out of the server
-      __gs_api_key remove
-      __gs_infomsg "Successfully logged out $GS_USER!"
-    ;;
     _update_) : Get latest version of game
       # Refresh self
       local curver="$GS_SERVER_API_VER"
       __gs_infomsg "Grabbing latest update from server..."
-      source <(curl -sfL $GS_URL)
+      source <(curl -sfL $GS_URL) -u $GS_USER
       if [[ "$curver" != "$GS_SERVER_API_VER" ]]; then
         __gs_infomsg "Done!"
       else

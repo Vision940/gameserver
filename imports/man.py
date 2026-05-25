@@ -11,7 +11,7 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
-from imports.games import GAME_CMDS
+from imports.games import GAME_CMDS, GAME_SHORT_NAMES
 
 #TODO: Default man page for games
 #TODO: big one... add fxn for this: man pages in game dirs (submodules)
@@ -25,7 +25,8 @@ def man(name):
         rendered = render_template(
             f"{name}.1",
             url=request.host_url.rstrip("/"),
-            game_list=f"\n{', '.join(GAME_CMDS)}"
+            game_list=f"\n{', '.join(GAME_CMDS)}",
+            short_name_list=GAME_SHORT_NAMES
         )
     except TemplateNotFound:
         abort(404)
@@ -39,6 +40,7 @@ def man_html(name):
             f"{name}.1",
             url=request.host_url.rstrip("/"),
             game_list=f"\n{', '.join(GAME_CMDS)}",
+            short_name_list=GAME_SHORT_NAMES,
             html=True
         )
     except TemplateNotFound:

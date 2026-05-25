@@ -3,11 +3,15 @@
 # Frontend for the "readbmp" library that prints a bitmap image to the terminal
 # using the half-block character.
 #
+# Updated by Daniel Tucker to support transparent bmp and printing text instead
+# of half blocks for gameserver use cases
+#
 # Author: Ponali <ponali2k@gmail.com>
 # Date: September 02, 2025
 # License: MIT
 
 . ./dev/lib/readbmp || exit
+. ./dev/lib/text-sprite || exit
 
 debug() {
 	echo '[debug]' "$@" >&2
@@ -18,7 +22,19 @@ fatal() {
 	exit 1
 }
 
+_get_next_char() {
+    local sprTxtFile="$1"
+    REPLY="▄"
+    [[ -f "$sprTxtFile" ]] || return 0
+
+    # Use REPLY from text-sprite char at fxn instead if populated
+    local r="$2" c="$3"
+    sprTxtCharAt "$sprTxtFile" "$r" "$c"
+    return
+}
+
 print_half_blocks() {
+    local sprTxtFile="$1"
     for ((y = 0; y < bitmap_height; y+=2)); do
         local prev_ansi=""
         for ((x = 0; x < bitmap_width; x++)); do
@@ -53,7 +69,8 @@ print_half_blocks() {
             fi
 
             # Full reset if not opaque
-            local char="▄"
+            _get_next_char "$sprTxtFile" "$y" "$x"
+            local char="$REPLY"
             if (( ${color1[3]} == 0 || ${color2[3]} == 0 )); then
               ansi=""
               char=" "
@@ -73,10 +90,11 @@ main() {
   local automated=false
 
   local OPTIND OPTARG opt
-	while getopts 'i:a' opt; do
+	while getopts 'i:as:' opt; do
 		case "$opt" in
 			i) file=$OPTARG;;
       a) automated=true;;
+      s) sprtxt=$OPTARG;;
 			*) fatal 'bad option';;
 		esac
   done
@@ -89,7 +107,7 @@ main() {
   read_bmp < "$file"
   $automated || echo -ne "\e[u\e[J" # restore cursor position and remove all debug logs
 
-  print_half_blocks
+  print_half_blocks "$sprtxt"
 
   $automated || echo -ne "\e[0m"
 }

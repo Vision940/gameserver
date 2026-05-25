@@ -2,6 +2,9 @@ TARGET := $(word 2,$(MAKECMDGOALS))
 SPRITE_DIR := static/games/$(TARGET)/sprites
 TEST_DIR := dev/tests
 
+#TODO: add ascii to make ascii to sprite
+#TODO: add devserver business
+#TODO: make sprites all
 .PHONY: sprites test
 sprites:
 	@if [ -z "$(TARGET)" ]; then \

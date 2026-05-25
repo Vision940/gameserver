@@ -50,10 +50,9 @@ __gs_frame() {
         return $?
       fi
 
-      # Get blank without __gs_sprite cache-id for speed
+      # Get default cells without __gs_sprite cache-id for speed
       local blank="${GSS_CELL["GENERAL_ARCADE_BAR_CELL:0:0"]}"
-
-      #TODO: Have default non-blank cell as well
+      local screen="${GSS_CELL["GENERAL_GAME_BACKGROUND_CELL:0:0"]}"
 
       # Set default cells
       local x y
@@ -62,7 +61,7 @@ __gs_frame() {
           if (( x < GS_X_START || x >= GS_X_END )); then
             GS_FRAME_CELLS[$(( y * COLUMNS + x ))]="$blank"
           else
-            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]=" "
+            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]="$screen"
           fi
         done
       done
@@ -218,39 +217,66 @@ __gs_buffer() {
   esac
 }
 
+# Defaults to Tango Light/Dark text colors
+export GS_DEFAULT_TEXT_LIGHT="211;215;207"
+export GS_DEFAULT_TEXT_DARK="46;52;54"
 __gs_text() {
-  #TODO: text sprites - .txtspr?
+  local darkVar="GS_${GS_GAME:-DEFAULT}_TEXT_DARK"
+  local dark="${!darkVar:-$GS_DEFAULT_TEXT_DARK}"
+
+  local lightVar="GS_${GS_GAME:-DEFAULT}_TEXT_LIGHT"
+  local light="${!lightVar:-$GS_DEFAULT_TEXT_LIGHT}"
+
+  local opt OPTIND OPTARG
+  while getopts 'dl' opt; do
+    case "$opt" in
+      d) [[ "$OPTARG" =~ ^[0-9]+";"[0-9]+";"[0-9]$ ]] &&  dark="$OPTARG" ;;
+      l) [[ "$OPTARG" =~ ^[0-9]+";"[0-9]+";"[0-9]$ ]] && light="$OPTARG" ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
   local x="$1" y="$2" text="$3"
   local reset=$'\x1b[0m'
   local ansi=""
 
-  local pos=$((y * COLUMNS + x ))
-  #TODO: if cell is set with ansi already use that instead of carrying forward
-  local currCell="${GS_FRAME_CELLS["$pos"]}"
-  if [[ $currCell =~ $'\e'\[48\;2\;([0-9]+)\;([0-9]+)\;([0-9]+)m ]]; then
-    local r=${BASH_REMATCH[1]}
-    local g=${BASH_REMATCH[2]}
-    local b=${BASH_REMATCH[3]}
-
-    local bg="${BASH_REMATCH[0]}"
-
-    #TODO: fr? -- also fix colors to be configurable or paletted
-    # Perceived luminescence
-    local lum=$(( 299*r + 587*g + 114*b ))
-
-    local fg=""
-    if (( lum > 128000 )); then
-      fg=$'\e[38;2;0;0;0m'
-    else
-      fg=$'\e[38;2;255;255;255m'
-    fi
-    ansi="${bg}${fg}"
-  fi
-
-  local char idx=0
+  local char currCell idx pos prevCell
+  local r g b bg lum thresh fg
   for (( idx=0; idx<${#text}; idx++ )); do
     char="${text:idx:1}"
     pos=$((y * COLUMNS + x + idx))
+    currCell="${GS_FRAME_CELLS["$pos"]}"
+
+    # Determine text color (light vs. dark) smartly from target cell
+    if [[ "$currCell" != "$prevCell" && "$currCell" =~ $'\e'\[48\;2\;([0-9]+)\;([0-9]+)\;([0-9]+)m ]]; then
+      bg="${BASH_REMATCH[0]}"
+      r=${BASH_REMATCH[1]}
+      g=${BASH_REMATCH[2]}
+      b=${BASH_REMATCH[3]}
+
+      # Perceived luminence based on sRGB / Rec. 709 coefficients
+      #   but with approximation gamma=2 for simplicity of calculation
+      # Coefficients are *10k and each color value is squared
+      lum=$(( 2126*r*r + 7152*g*g + 722*b*b ))
+      # W3C Contrast Ratio formula:
+      # (L1 + .05) / (L2 + .05)
+      # With L as luminance of the color, 0 for black, 1 for white,
+      #   when the below is true, text should be dark:
+      #   (L + 0.05) / (0.0 + 0.05) > (1.0 + 0.05) / (L + 0.05)
+      # This simplifies to text black when L > .179
+      # Max luminence = (.2126+.7152+.0722)*10k*255^2
+      thresh=116394750 # max * .179
+
+      fg=$'\e[38;2;'
+      if (( lum > thresh )); then
+        fg+="${dark}m"
+      else
+        fg+="${light}m"
+      fi
+      ansi="${bg}${fg}"
+      prevCell="$currCell"
+    fi
+
     GS_FRAME_CELLS[$pos]="${ansi}$char"
     if (( idx == ${#text}-1 )); then
       GS_FRAME_CELLS[$pos]+="${reset}"

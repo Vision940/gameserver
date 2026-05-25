@@ -13,12 +13,19 @@ __gs_button_manager() {
       local idx=${#GSW_BTNMAN["$id"]}
       local btnMan def label event extra
       for def in "$@"; do
-        # def var should be "label:event:x:y"
+        # def var should be "label:event:x:y[:spr:selSpr]"
         IFS=':' read -r label event x y extra <<<"$def"
         __gs_required_args label event x y || return 2
 
+        # Determine sprites
+        local spr selSpr
+        IFS=':' read -r spr selSpr extra <<<"$extra"
+        local extraArgs=()
+        [[ -n "$spr" ]] && extraArgs+=("-s" "$spr")
+        [[ -n "$selSpr" ]] && extraArgs+=("-S" "$selSpr")
+
         btnId="${id}_button_${idx}"
-        __gs_button init "$btnId" -x "$x" -y "$y" "$label" "$event" || return 1
+        __gs_button init "$btnId" "${extraArgs[@]}" -x "$x" -y "$y" "$label" "$event" || return 1
 
         __gs_node add-child "$id" "$btnId"
         __gs_node set-parent "$btnId" "$id"
@@ -34,7 +41,7 @@ __gs_button_manager() {
     ;;
     _click-mouse_)
       # Only click button if mouse is in pos
-      __gs_node contains-point -m "$id" || return 0
+      __gs_node contains-point -m "${GSW_BTNMAN_SEL[$id]}" || return 0
     ;&
     _click_)
       # Click currently selected button
@@ -135,14 +142,34 @@ __gs_button() {
   [[ $action != setup ]] && { __gs_required_args id || return 2; }
   case _${action}_ in
     _init_)
-      # Use id sprite paths if available
+      shift 2
+
+      # Determine sprites
       local buttonSpr="widgets/button/button-${id}.spr"
-      [[ ! -f "${GS_CACHE}/sprites/${buttonSpr}" ]] && buttonSpr="widgets/button/button-default.spr"
       local selSpr="widgets/button/button-selected-${id}.spr"
-      [[ ! -f "${GS_CACHE}/sprites/${selSpr}" ]] && selSpr="widgets/button/button-selected-default.spr"
+      local customSprs=false
+      local opt OPTIND OPTARG
+      while getopts ':s:S:' opt; do
+        case $opt in
+          s) buttonSpr="$OPTARG"; customSprs=true ;;
+          S) selSpr="$OPTARG"; customSprs=true ;;
+          *) ((OPTIND--)); break ;;
+        esac
+      done
+      (( OPTIND > 0 )) && shift $(( OPTIND - 1 ))
+
+      # Use id sprite paths if available
+      local sprPath
+      for sprPath in "$buttonSpr" "$selSpr"; do
+        [[ ! -f "${GS_CACHE}/sprites/${sprPath}" ]] && {
+          buttonSpr="widgets/button/button-default.spr"
+          selSpr="widgets/button/button-selected-default.spr"
+          $customSprs && __gs_debugmsg "$sprPath not found, using default sprites for button \"$id\""
+          break
+        }
+      done
 
       # Init button node
-      shift 2
       __gs_node init button "$id" -s "${buttonSpr}" "$@" || return 2
       shift "$(( REPLY - 2 ))"
 

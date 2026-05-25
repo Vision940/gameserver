@@ -56,6 +56,7 @@ __gs_node() {
         esac
       done
       local endreply=$(( OPTIND - 1 ))
+      (( endrepy < 0 )) && endreply=0
 
       __gs_required_args s || return 2
 
@@ -73,14 +74,16 @@ __gs_node() {
       h=${GSS_ROWS[$sprId]}
       __gs_required_args w h || return 2
 
-      if ${centered}; then
-        x=$(( COLUMNS / 2 - w / 2 - w % 2))
-        y=$(( LINES / 2 - h / 2 + h % 2))
-      else
-        # Use c as center position and resolve equation inputs
-        __gs_calc -ir x "${x//c/$GS_X_CENTER}" || return 1
-        __gs_calc -ir y "${y//c/$GS_Y_CENTER}" || return 1
-      fi
+      local xOffset=$(( w / 2 + w % 2 ))
+      local yOffset=$(( h / 2 - h % 2 ))
+      local xCenter=$(( COLUMNS / 2 - xOffset ))
+      local yCenter=$(( LINES / 2 - yOffset ))
+      $centered && x=c y=c
+      __gs_required_args x y || return 2
+
+      # Use c as center position and resolve equation inputs
+      __gs_calc -ir x "${x//c/$xCenter}" || return 1
+      __gs_calc -ir y "${y//c/$yCenter}" || return 1
       __gs_required_args x y || return 2
 
       GSN_TYPE["$id"]="$type"

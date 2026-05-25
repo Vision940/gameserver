@@ -15,7 +15,23 @@ if ! declare -f __gs_{{ game.cmd_name }}_title &>/dev/null; then
     case _${action}_ in
       _open_)
         __gs_scene_manager push title
+        __gs_button_manager init title
+
+        local firstBtnOffset=$(( GS_Y_END / 5 ))
+        __gs_button_manager add-buttons title \
+          Play:play:c:c+$firstBtnOffset \
+          Quit:quit:c:c+$firstBtnOffset+4 || {
+          __gs_errormsg "Could not init button manager"
+          return 1
+        }
+
+        __gs_button_manager subscribe-defaults title
+        __gs_event subscribe title quit '{ export GS_EXIT=true; }'
         __gs_event subscribe title pause '__gs_{{ game.cmd_name }}_pause open'
+      ;;
+      _render_)
+        __gs_text ${GS_X_START:-0} ${GS_Y_START:-0} "I'm rendering scene title!"
+        __gs_button_manager render title
       ;;
       #TODO: create button manager with play/settings/quit
       #TODO: quit button should run close which also kills the game

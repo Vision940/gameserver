@@ -78,4 +78,9 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
   esac
 }
 __gs_source_template {{ game.cmd_name }}-completion
+{% if game.short_name != game.cmd_name %}
+if alias {{ game.short_name }} &>/dev/null; then
+__gs_source_template {{ game.short_name }}-alias-completion
+fi
+{% endif %}
 

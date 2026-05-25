@@ -20,6 +20,7 @@ from imports.game_objs import Game
 GAME_LIST = [Game(game) for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
 GAME_CMDS = [game.cmd_name for game in GAME_LIST]
 GAME_SOURCES = [game.source_name for game in GAME_LIST]
+GAME_SHORT_NAMES = [(game.short_name, game.cmd_name) for game in GAME_LIST if game.short_name != game.cmd_name]
 
 bp = Blueprint("games", __name__, url_prefix="/games")
 
@@ -55,7 +56,9 @@ def games():
     try:
         script = render_template(
             "client/games",
-            game_list=GAME_LIST
+            game_list=GAME_LIST,
+            game_cmds=GAME_CMDS,
+            short_name_list=GAME_SHORT_NAMES
         )
     except TemplateNotFound:
         abort(404)

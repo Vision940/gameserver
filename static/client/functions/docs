@@ -44,7 +44,7 @@ __gs_longopts() {
   local version="${!verVar:-$GS_SERVER_API_VER}"
   local copyrightVar="GS_${caller^^}_COPYRIGHT"
   local parsed
-  parsed=$(getopt -aU -o h -l help,version -n "$caller" -- "$@" 2>/dev/null) || {
+  parsed=$(getopt -aU -o h,v -l help,version -n "$caller" -- "$@" 2>/dev/null) || {
     local params=" $* "
     if [[ "$params" =~ " "(--version|--help|-h)" " ]]; then
       parsed="${BASH_REMATCH[1]}" 2>/dev/null || return 1
@@ -56,6 +56,7 @@ __gs_longopts() {
   eval "set -- $parsed"
   while (($#)); do
     case $1 in
+      '-v') break ;; # preserve this for debug
       '--version')
         cat <<- EOF
 					$caller (gameserver) v$version

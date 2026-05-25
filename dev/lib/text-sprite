@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+## dev/lib/text-sprite ##
+##
+## text-sprite provides support to draw text onto sprites in their .spr files
+##
+## This is called in the sprite generation process if a <sprName>.ascii file
+##   exists
+##
+## .ascii files are named as such to differentiate them from .txt files -
+##   they aren't limited to just ascii characters
+##
+## Functions:
+##   genSprTxt ASCIIFILE SPRTXTOUT
+##     genSprTxt creates SPRTXTOUT from ASCIIFILE
+##     the .sprtxt format is just an easily parseable but annoying to write
+##       version of an .ascii file where every non-space character is on its
+##       own line in the format ^#row,col:char$
+##     the .sprtxt file is created here instead of just parsing the .ascii file
+##       in view-bmp to clearly delineate where logic is happening
+##   sprTxtCharAt SPRTXTFILE ROW COL
+##     sprTxtCharAt is a simple method to retrieve the txt CHAR from the matching
+##       #ROW,COL:CHAR line in the SPRTXTFILE
+##     REPLY is set to the result of the parse if the described line is found in
+##       the .sprtxt file
+##     otherwise, nothing happens
+##
+## This file will run genSprTxt with provided args when called as an executable
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+genSprTxt() {
+  local asciiFile="${1?"ERROR: Need asciiFile to $FUNCNAME call"}"
+  local sprTxtOut="${2?"ERROR: Need sprTxtOut to $FUNCNAME call"}"
+
+  echo "creating text map from '$asciiFile'"
+
+  [[ -f "$asciiFile" ]] || {
+    echo "File $asciiFile does not exist"
+    return 1
+  }
+  echo -n "" > $sprTxtOut
+
+  local c=0 r=0
+  local line char
+  while IFS= read -r line; do
+    c=0
+    while IFS= read -r -n 1 char; do
+      ((c++))
+      [[ -z "$char" || "$char" =~ ^[[:space:]]$ ]] && continue
+      echo "#$r,$c:$char" >> $sprTxtOut
+    done <<<"$line"
+    ((r++))
+  done < $asciiFile
+  echo "generated text map '$sprTxtOut'"
+}
+
+sprTxtCharAt() {
+  local file="${1?ERROR: Need file}"
+  local row="$2" col="$3"
+  local result
+  result="${ sed -ne "/^#$row,$col:.$/s/.*:\(.\)/\1/p" $file; }" || return 1
+  [[ -n "$result" ]] && REPLY="$result"
+}
+
+#TODO: fxn to convert ascii file to spr if wanting only ascii as a spr
+
+# Run if not sourced
+if ! ( return 0 2>/dev/null ); then
+  genSprTxt "$@"
+  exit
+fi
+

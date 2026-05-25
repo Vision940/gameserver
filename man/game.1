@@ -1,55 +1,73 @@
-.TH GAME 1 "March 14, 2026" "0.0.1" "Game Server Commands"
+.TH GAME 1 "May 28, 2026" "0.0.2" "Game Server Commands"
 .SH NAME
 game \- interface with game server to load games
 .SH SYNOPSIS
 .B game
-[
-.B help
-|
-.B load
-|
-.B login
-|
-.B logout
-|
-.B passwd
-|
-.B update
-]
+.RI [ OPTS ]
 .SH DESCRIPTION
 The
 .B game
-command allows users to log into / load games from the python game server backend.
-
+command allows users to log into / interact with games from the python game server backend.
+.PP
 It is typically initialized in the current shell with:
 .PP
-.nf
+.EX
 source <(curl -m 2 -sfL {{ url }})
-.fi
+.EE
 .PP
 After initialization, the
 .B game
-command can load games from the server, print help, log into the server, and reset user passwords.
-.nf
-
-.fi
+command can print help, log into the server, and reset user passwords.
+.PP
 Users can automatically source the
 .B game
-command into their environments by
-adding the source command to their bash configuration file (typically ~/.bashrc).
+command into their environments by adding the source command to their bash configuration file (typically ~/.bashrc).
+.PP
+The games currently available to load are:
+.RS
 .nf
-
-To see what the server sends on source, just curl the server link or check
-it out in a web browser!
+{{ game_list }}
+.fi
+.RE
+.PP
+Most games also can be accessed using a short alias name:
+.RS
+.nf
+{% for short, long in short_name_list %}
+{{ short }} -> {{ long }}
+{% endfor %}
+.fi
+.RE
+.PP
+To see what the server sends on source, just curl the server link or check it out in a web browser!
 .SH OPTIONS
 .TP
 .B help
 Show this help.
 .TP
-.B load
-[GAME]
-Load a game. The games currently available to load are:
-{{ game_list }}
+.B account
+View currently logged in game server account.
+.TP
+.BI "admin [ ban " ID " | info | requests [(approve | reject) " ID " | view] ]"
+View game server admin information.
+.RS
+.PP
+Non-admin users can only run
+.BR "game admin" ,
+which is equivalent to
+.BR "game admin info"
+for admin users.
+.PP
+Admin users can also ban users by ID or approve/reject/view user requests.
+.PP
+.BR "game admin"
+defaults to
+.BR "game admin info" .
+.PP
+.BR "game admin requests"
+defaults to
+.BR "game admin requests view" .
+.RE
 .TP
 .B login
 Login to the game server. Game server accounts are set up on source, with passwords set at first login.
@@ -61,7 +79,15 @@ Log out of the game server in the current terminal.
 Change user password on server. Users are required to log in again to run this action.
 .TP
 .B update
-Update the version of the game command in the current terminal. This essentially just re-runs the source command to get the latest version of the command.
+Update the version of the game command in the current terminal. This essentially just re-sources and initializes
+.BR game .
+.TP
+.B users
+View list of users and relevant user info for current game server install.
+.RS
+.PP
+The resulting user table is more detailed if calling user is an admin.
+.RE
 .SH AUTHOR
 Written by Daniel Tucker <github.com/Vision940>
 {% if not html %}
@@ -69,4 +95,4 @@ Written by Daniel Tucker <github.com/Vision940>
 Check out the server docs site as well! <{{ url }}/man>
 {% endif %}
 .SH SEE ALSO
-.BR cmdenv (1),
+.BR cmdenv (1)

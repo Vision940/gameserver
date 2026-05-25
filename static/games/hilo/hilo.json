@@ -2,6 +2,7 @@
   "version": "0.0.1",
   "cmd_name": "hilo",
   "full_name": "Higher or Lower",
+  "short_name": "hl",
   "imports": [
     "games/hilo-common"
   ]

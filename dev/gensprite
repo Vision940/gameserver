@@ -4,6 +4,10 @@
 ## gensprite takes advantage of the hard work of Dave Eddy and Ponali to take a
 ##   .txt/.pal file and make a printable half-block emoji sprite entirely in bash
 ##
+## Also is able to draw text onto sprites using mapped .sprtxt files generated
+##   from .ascii files - see dev sprite docs for more information
+#TODO: Figure a good way to doc dev - maybe a man page? sprites
+##
 ## This is decidedly overkill for gs sprite purposes, but it is very cool and allows
 ##   us to have easy .bmp images generated of game sprites if that is ever needed
 ##
@@ -22,6 +26,8 @@ gensprite_main() {
   local palette="${1%txt}pal"
   local defpalette="${palette%/*}/default.pal"
   local spriteout="${1%txt}spr"
+  local ascii="${1%txt}ascii"
+  local sprtxttemp="${1%txt}sprtxt"
 
   echo "creating sprite from '$spritefile'"
 
@@ -40,10 +46,16 @@ gensprite_main() {
 
   echo "using palette '$palette'"
 
+  # Generate bmp
   bash dev/lib/sprite-to-bmp -p "$palette" -o "$bmptemp" < "$spritefile" 2>/dev/null
-  bash dev/lib/view-bmp -i "$bmptemp" -a 2>/dev/null > "$spriteout"
+  # Generate sprtxt if .ascii exists
+  [[ -f "$ascii" ]] && {
+    bash dev/lib/text-sprite "$ascii" "$sprtxttemp" || return 1
+  }
+  bash dev/lib/view-bmp -s "$sprtxttemp" -i "$bmptemp" -a 2>/dev/null > "$spriteout"
   echo "created sprite '$spriteout'"
   \rm -v "$bmptemp"
+  [[ -f "$sprtxttemp" ]] && \rm -v "$sprtxttemp"
 }
 
 gensprite_main "$@"

@@ -48,7 +48,8 @@ __gs_popup_menu() {
 
       # Define buttons in manager
       #TODO: Configurable x offset
-      local suffix=":$(( x0 + 3 )):0"
+      local sprites="widgets/button/button-thin.spr:widgets/button/button-selected-thin.spr"
+      local suffix=":$(( x0 + 3 )):0:$sprites"
       __gs_button_manager add-buttons "$id" "${@/%/$suffix}" || {
         __gs_errormsg "Could not init button manager"
         return 1

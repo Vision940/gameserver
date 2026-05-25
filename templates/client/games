@@ -11,7 +11,9 @@
 ##   don't have to have their environments flooded with gameserver code
 ##
 ## This provides a function for every game in the game list, currently:
-##   - {{ game_list | join('\n##   - ') }}
+##   - {{ game_cmds | join('\n##   - ') }}
+## As well as an alias for every game with a short_name configured, currently:
+##   - {{ short_name_list | map("join", " -> ") | join("\n##   - ") }}
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -28,12 +30,17 @@ GS_GAME_SOURCES="{{ game_list | map(attribute='source_name') | list | join(' ') 
       *) ((OPTIND--)); break ;;
     esac
   done
-  shift $(( OPTIND - 1 ))
+  (( OPTIND > 0 )) && shift $(( OPTIND - 1 ))
 
   $logger "Loading latest version of {{ game.cmd_name }} from server..."
   unset -f {{ game.cmd_name }} # Unset placeholder function (this)
   __gs_source_games {{ game.source_name }} # Set up real function
   command -v {{ game.cmd_name }} &>/dev/null && {{ game.cmd_name }} $@
 }
+{% if game.short_name != game.cmd_name %}
+if ! command -v {{ game.short_name }} &>/dev/null; then
+  alias {{ game.short_name }}='{{ game.cmd_name }}'
+fi
+{% endif %}
 {% endfor %}
 
