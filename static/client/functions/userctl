@@ -44,7 +44,7 @@ __gs_passwd_prompt() {
 __gs_set_passwd() {
   __gs_infomsg "Setting user password for $GS_USER..."
   local setPasswd
-  setPasswd=$(__gs_curl_post passwd password $1) || return 1
+  setPasswd=$(__gs_curl_post api/user msgType passwd password $1) || return 1
   if __gs_response_valid "$setPasswd"; then
     local key
     key=$(__gs_parse_response ".key" "$setPasswd") || return 1

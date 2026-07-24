@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+#TODO: from flask import g and save g.pool for pool
 _pool = None
 
 

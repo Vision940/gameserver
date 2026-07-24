@@ -1,5 +1,5 @@
-from imports import db # db interactions
-from imports import config # server config loader
+from server import db # db interactions
+from server import config # server config loader
 
 
 ## Functions ##

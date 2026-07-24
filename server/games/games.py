@@ -1,7 +1,8 @@
-import importlib
 import os
 import tarfile
 import tempfile
+
+from importlib import import_module
 
 from flask import (
     abort,
@@ -13,12 +14,13 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
-from imports.game_objs import Game
+from server.games.base import Game
 
 
 ## Globals ##
 GAME_LIST = [Game(game) for game in os.listdir('static/games') if os.path.isfile(f'static/games/{game}/{game}')]
 GAME_CMDS = [game.cmd_name for game in GAME_LIST]
+GAME_DICT = {game.cmd_name: game for game in GAME_LIST}
 GAME_SOURCES = [game.source_name for game in GAME_LIST]
 GAME_SHORT_NAMES = [(game.short_name, game.cmd_name) for game in GAME_LIST if game.short_name != game.cmd_name]
 
@@ -38,16 +40,16 @@ def import_game_bps(app):
         if not os.path.isdir(bp_dir):
             continue
 
-        for filename in os.listdir(bp_dir):
-            if filename.endswith('.py') and filename != '__init__.py':
-                module_name = f'{bp_dir.replace("/", ".")}.{filename[:-3]}'
-                module = importlib.import_module(module_name)
+        filename = f"{bp_dir}/{game_dir}.py"
+        if os.path.isfile(filename):
+            module_name = f'{filename.replace("/", ".")[:-3]}'
+            module = import_module(module_name)
 
-                # Find blueprint object within module and add
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if isinstance(attr, Blueprint):
-                        app.register_blueprint(attr)
+            # Find blueprint object within module and add
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if isinstance(attr, Blueprint):
+                    app.register_blueprint(attr)
 
 
 ## Routes ##

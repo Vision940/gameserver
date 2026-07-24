@@ -29,7 +29,7 @@
 #TODO: admin passwd reset for other users
 __gs_admininfo() {
   local resp
-  resp=$(__gs_curl_post admin/info) || {
+  resp=$(__gs_curl_post api/admin msgType info) || {
     __gs_errormsg "Unable to retrieve admin list from server"
     return 1
   }
@@ -57,7 +57,7 @@ __gs_admin() {
 
       __gs_y_or_n -ws "Banning a user cannot be undone" || return 1
 
-      resp=$(__gs_curl_post admin/ban id $userId reason "$reason") || {
+      resp=$(__gs_curl_post api/admin msgType ban id $userId reason "$reason") || {
         __gs_errormsg "Could not ban ID: ${userId:-null}"
         return 1
       }
@@ -77,7 +77,7 @@ __gs_admin() {
             return 1
           }
 
-          resp=$(__gs_curl_post admin/approve id $reqId) || {
+          resp=$(__gs_curl_post api/admin msgType approve id $reqId) || {
             __gs_errormsg "Could not approve ID: ${reqId:-null}"
             return 1
           }
@@ -101,7 +101,7 @@ __gs_admin() {
           }
           local reason="$REPLY"
 
-          resp=$(__gs_curl_post admin/reject id $reqId reason "$reason") || {
+          resp=$(__gs_curl_post api/admin msgType reject id $reqId reason "$reason") || {
             __gs_errormsg "Could not reject ID: ${reqId:-null}"
             return 1
           }
@@ -114,7 +114,7 @@ __gs_admin() {
         ;;
         _requests__) ;&
         _requests_view_) : View account requests
-          resp=$(__gs_curl_post admin/requests) || {
+          resp=$(__gs_curl_post api/admin msgType requests) || {
             __gs_errormsg "Could not retrieve user request list"
             return 1
           }

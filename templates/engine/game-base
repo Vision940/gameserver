@@ -18,7 +18,7 @@ if ! declare -f __gs_{{ game.cmd_name }}_main &>/dev/null && {{ game.has_main | 
   return
 fi
 
-GS_{{ game.cmd_name | upper | replace('-', '_') }}_VERSION={{ game.version }}
+GS_{{ game.cmd_name | upper | replace('-', '_') }}_VER={{ game.version }}
 
 # Source game imports
 __gs_{{ game.cmd_name }}_imports() {

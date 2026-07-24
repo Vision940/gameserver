@@ -18,8 +18,8 @@ ROOT = os.path.abspath(f"{os.path.dirname(os.path.abspath(__file__))}/..")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from imports import db
-from imports.games import GAME_LIST
+from server import db
+from server.games.games import GAME_LIST
 
 
 def ensure_schema_migrations_table(cur):

@@ -11,7 +11,7 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
-from imports.games import GAME_CMDS, GAME_SHORT_NAMES
+from server.games.games import GAME_CMDS, GAME_SHORT_NAMES
 
 #TODO: Default man page for games
 #TODO: big one... add fxn for this: man pages in game dirs (submodules)

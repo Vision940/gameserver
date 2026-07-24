@@ -11,8 +11,8 @@
 ##     call at beginning of user-facing function as `__gs_longopts "$@" && return`
 ##     for games with more to add to the copyright line, set GS_<GAME>_COPYRIGHT
 ##       and it will be added to `<GAME> --version`
-##     the version string used is stored in GS_<GAME>_VERSION, but defaults to
-##       GS_SERVER_API_VER as set in initial source if <GAME> version unset/null
+##     the version string used is stored in GS_<GAME>_VER, but defaults to
+##       GS_SERVER_VER as set in initial source if <GAME> version unset/null
 ##   __gs_unfound_option OPTION
 ##     prints standardized option not found message for passed in OPTION
 ##     if OPTION is empty, just says to run `FUNC help` for help
@@ -39,9 +39,9 @@ __gs_longopts() {
   # Get length of FUNCNAME to support pre-4.2
   # This is so a theoretical pre-4.2 cmd line game could still call __gs_longopts
   local funcStackLastIdx=$((${#FUNCNAME[@]}-1))
-  local caller=${FUNCNAME[$funcStackLastIdx]}
-  local verVar="GS_${caller^^}_VERSION"
-  local version="${!verVar:-$GS_SERVER_API_VER}"
+  local caller=${FUNCNAME[$funcStackLastIdx]//-/_}
+  local verVar="GS_${caller^^}_VER"
+  local version="${!verVar:-$GS_SERVER_VER}"
   local copyrightVar="GS_${caller^^}_COPYRIGHT"
   local parsed
   parsed=$(getopt -aU -o h,v -l help,version -n "$caller" -- "$@" 2>/dev/null) || {
@@ -58,7 +58,7 @@ __gs_longopts() {
     case $1 in
       '-v') break ;; # preserve this for debug
       '--version')
-        cat <<- EOF
+        command cat <<- EOF
 					$caller (gameserver) v$version
 					Copyright (C) 2026 Daniel Tucker <github.com/Vision940>
 					${!copyrightVar:+${!copyrightVar}

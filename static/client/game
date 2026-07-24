@@ -35,9 +35,6 @@ for import in ${__GS_IMPORTS[@]}; do
 done
 unset import __GS_IMPORTS
 
-# Curl admin route for appropriate __gs_admin function
-source <(__gs_curl_post -q admin) || __gs_debugmsg "Admin template failed on source"
-
 game() {
   __gs_longopts "$@" && return
   __gs_setdebug $1 || shift
@@ -52,9 +49,9 @@ game() {
   case _$1_ in
     # User-facing functionality
     _account_) : View account info
-      resp=$(__gs_curl_post whoami) || return 1
+      resp=$(__gs_curl_post api/user msgType whoami) || return 1
       __gs_json_to_table \
-        -d "user_profile" \
+        -d "userProfile" \
         -j "$resp" \
         Username:username Status:status "Last Seen:last_seen_at"
     ;;
@@ -91,7 +88,7 @@ game() {
       __gs_request _login_ "$hashedPassword" || { __gs_userctl_cleanup; return 1; }
 
       # Grab correct __gs_admin function
-      source <(__gs_curl_post -q admin)
+      source <(__gs_curl_post -q api/admin msgType query)
 
       # Cleanup
       __gs_userctl_cleanup
@@ -122,17 +119,17 @@ game() {
     ;;
     _update_) : Get latest version of game
       # Refresh self
-      local curver="$GS_SERVER_API_VER"
+      local curver="$GS_SERVER_VER"
       __gs_infomsg "Grabbing latest update from server..."
       source <(curl -sfL $GS_URL) -u $GS_USER
-      if [[ "$curver" != "$GS_SERVER_API_VER" ]]; then
+      if [[ "$curver" != "$GS_SERVER_VER" ]]; then
         __gs_infomsg "Done!"
       else
         __gs_warnmsg "No new changes detected."
       fi
     ;;
     _users_) : See user info
-      resp=$(__gs_curl_post list_users) || return 1
+      resp=$(__gs_curl_post api/user msgType list) || return 1
       if jq -e ".admin == true" <<<"$resp" &>/dev/null; then
         __gs_json_to_table \
           -d "users" -a \

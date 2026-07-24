@@ -113,15 +113,21 @@ __gs_curl_post() {
   # Don't let users trick login before setting password
   [[ "${GS_API_KEY^^}" == "NULL" ]] && unset GS_API_KEY
 
+  # Get version to use (game vs server)
+  local caller=${FUNCNAME[-1]//-/_}
+  local verVar="GS_${caller^^}_VER"
+  local version="${!verVar:-$GS_SERVER_VER}"
+
   # Populate json with defaults and opts
   local json
   json="$(
     __gs_json_content "${@:2}" \
       user "$GS_USER" \
-      curuser "$GS_CURUSER" \
-      host "${HOSTNAME:-$(hostname 2>/dev/null || command cat /etc/hostname 2>/dev/null || echo unknown)}" \
-      key "${GS_API_KEY:-}" \
-      ver "$GS_SERVER_API_VER"
+      apiKey "${GS_API_KEY:-}" \
+      version "$version" \
+      caller "$caller" \
+      curUser "$GS_CURUSER" \
+      host "${HOSTNAME:-$(hostname 2>/dev/null || command cat /etc/hostname 2>/dev/null || echo unknown)}"
   )" || return 1
 
   __gs_debugmsg "Requesting $GS_URL/$route with $json" 5
@@ -139,9 +145,10 @@ __gs_curl_post() {
   ) || return 1
 
   __gs_debugmsg "resp: $response" 6
-  local muter=""
-  $quiet && muter="2>/dev/null"
-  __gs_check_resp "$response" $muter || return 1
+
+  if ! $quiet; then
+    __gs_check_resp "$response" || return 1
+  fi
   printf "%s" "$response"
 }
 
@@ -158,24 +165,28 @@ __gs_parse_response() {
 
 __gs_check_resp() {
   local jsonResp="$1"
+  local errType=$(__gs_parse_response ".errType // null" "$jsonResp" off)
 
-  if jq -e ".oldver == true" <<<"$jsonResp" &>/dev/null; then
-    __gs_errormsg "Old server API version detected."
-    __gs_errormsg "Please run \`game update\` to get the latest server updates!"
-    return 1
-  fi
-
-  if jq -e ".oldkey == true" <<<"$jsonResp" &>/dev/null; then
-    __gs_errormsg "Invalid server API key."
-    __gs_errormsg "Please run \`game login\` to re-authenticate."
-    return 1
-  fi
-
-  if jq -e ".notadmin == true" <<<"$jsonResp" &>/dev/null; then
-    __gs_errormsg "\"Sir, this is a restricted area!\""
-    __gs_errormsg "Only admins are allowed to run this command."
-    return 1
-  fi
+  case "$errType" in
+    badreq)
+      __gs_errormsg "Bad API request."
+      __gs_errormsg "Please run \`game update\` to get the latest server updates!"
+    ;;
+    oldver)
+      __gs_errormsg "Old API version detected."
+      __gs_errormsg "Please run \`game update\` to get the latest server updates!"
+    ;;
+    oldkey)
+      __gs_errormsg "Invalid server API key."
+      __gs_errormsg "Please run \`game login\` to re-authenticate."
+    ;;
+    notadmin)
+      __gs_errormsg "\"Sir, this is a restricted area!\""
+      __gs_errormsg "Only admins are allowed to run this command."
+    ;;
+  esac
+  [[ "$errType" != "null" ]] && return 1
+  return 0
 }
 
 __gs_response_valid() {
@@ -189,9 +200,9 @@ __gs_request() {
   local response
   case _$1_ in
     __apikey__)
-      local create="${2:+true}"
-      response=$(__gs_curl_post user create "${create:-false}") || return 1
-      local key=$(__gs_parse_response ".key // null" "$response" off)
+      local register="${2:+true}"
+      response=$(__gs_curl_post api/user msgType user register "${register:-false}") || return 1
+      local key=$(__gs_parse_response ".apiKey // null" "$response" off)
       local action=$(__gs_parse_response ".action // null" "$response" off)
 
       if [[ "$key" != "null" ]]; then
@@ -238,8 +249,8 @@ __gs_request() {
       esac
     ;;
     __cancel__)
-      response=$(__gs_curl_post cancel) || return 1
-      local userId=$(__gs_parse_response ".user_id // null" "$response" off)
+      response=$(__gs_curl_post api/user msgType cancel) || return 1
+      local userId=$(__gs_parse_response ".userId // null" "$response" off)
       local user=$(__gs_parse_response ".user // null" "$response" off)
       local action=$(__gs_parse_response ".action // null" "$response" off)
 
@@ -271,12 +282,12 @@ __gs_request() {
         ;;
       esac
 
-      response=$(__gs_curl_post login password $2) || return 1
+      response=$(__gs_curl_post api/user msgType login password $2) || return 1
 
       if __gs_response_valid "$response"; then
         export GS_USER_STATE=Loggedin
         local key
-        key=$(__gs_parse_response ".key" "$response") || return 1
+        key=$(__gs_parse_response ".apiKey" "$response") || return 1
         __gs_api_key save "$key" || __gs_debugmsg "Could not save api key for $GS_USER"
 
         __gs_infomsg "Successfully logged in $GS_USER!"

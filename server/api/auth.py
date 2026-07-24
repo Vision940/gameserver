@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import hmac
 import os
@@ -7,11 +9,13 @@ from datetime import datetime, timezone
 
 import bcrypt
 
-from flask import jsonify
+from server import __version__ as SERVER_VER
+from server import db # db interactions
 
-from imports import __version__ as SERVER_API_VER
-from imports import db # db interactions
-from imports import users # public user functions
+from server.funcs import users # public user functions
+from server.games.games import GAME_DICT # game info dict
+
+from server.api.responses.base import ErrorResp # api response obj
 
 # Ensure secret key set up for server
 SERVER_SECRET = os.environ.get('SECRET_KEY', '').encode("utf-8")
@@ -21,39 +25,36 @@ if not SERVER_SECRET:
 API_KEY_LIFETIME_DAYS = 90
 
 
-def validate_api_req(request, cur_ver=SERVER_API_VER, key_check=True, admin_check=False):
+def validate_api_req(req: ApiReq, key_check=True, admin_check=False):
     """
     This function returns a response only if the req is invalid, otherwise None
 
     It checks:
+        message structure as defined by api route/type
         version using passed in cur_ver as latest version
         key if key_check=True and user exists
         user admin status if admin_check=True
 
-    Games call using game_objs.GameHandler(game_name).validate_api_req(request)
+    Games call using games.handler.GameHandler(game_name).validate_api_req(request)
     """
 
-    data = request.get_json(silent=True) or {}
     resp = None
 
-    username = data.get("user")
-    key = data.get("key")
-    version = data.get("ver")
-    user_info = get_user_auth(username)
+    cur_ver = SERVER_VER
+    if req.caller in GAME_DICT:
+        cur_ver = GAME_DICT[req.caller].version
 
-    # Check latest server ver
-    if version != cur_ver:
-        resp = jsonify(valid=False, error="Old server API version", oldver=True), 464
+    if req.version != cur_ver:
+        # Check against current server/game ver
+        resp = ErrorResp(error="Old server API version", errType="oldver", code=464)
+    elif key_check and req.userProfile and not validate_key(req.user, req.apiKey):
+        # Key check should happen for every request except /login and /user
+        # Only error out on key check if user exists
+        resp = ErrorResp(error="Invalid API key", errType="oldkey", code=403)
+    elif admin_check and not users.user_is_admin(req.user):
+        resp = ErrorResp(error="User not admin", errType="notadmin", code=403)
 
-    # Key check should happen for every request except /login and /user
-    # Only error out on key check if user exists
-    if key_check and user_info and not validate_key(username, key):
-        resp = jsonify(valid=False, error="Invalid API key", oldkey=True), 403
-
-    if admin_check and not users.user_is_admin(username):
-        resp = jsonify(valid=False, error="User not admin", notadmin=True), 403
-
-    return data, resp
+    return resp
 
 
 def hash_password(raw):

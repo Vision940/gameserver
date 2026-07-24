@@ -77,16 +77,8 @@ __gs_deps_check() {
 __gs_deps_check || return 1
 
 # These are set from server at source
-export GS_SERVER_API_VER="{{ server_ver }}"
+export GS_SERVER_VER="{{ server_ver }}"
 export GS_URL="{{ url }}"
-
-# These dir variables are available to games that want persistent data state
-#   across client sessions in source location
-# Games should not expect these directories to house important information,
-#   as users can log in from different homes/machines/usernames
-export GS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}/gameserver"
-export GS_DATA_DIR="${XDG_DATA_HOME:-${HOME:-/tmp}/.local/share}/gameserver"
-export GS_AUTH_FILE="$GS_DATA_DIR/auth.txt"
 
 __gs_source_file() {
   local serverPath=${2:-static/client}
@@ -104,11 +96,12 @@ gameinit() {
   # Prioritize id and whoami to avoid impersonation
   export GS_CURUSER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
 
+  __gs_source_file functions/logging
   local create=
   local cancel=false
   export GS_USER=$GS_CURUSER
   local opt OPTIND OPTARG
-  while getopts 'cCu:' opt; do
+  while getopts ':cCu:' opt; do
     case "$opt" in
       c) create=true ;;
       C) cancel=true ;;
@@ -117,6 +110,14 @@ gameinit() {
     esac
   done
   shift $(( OPTIND - 1 ))
+
+  # These dir variables are available to games that want persistent data state
+  #   across client sessions for user in source location
+  # Games should not expect these directories to house important information,
+  #   as users can log in from different homes/machines/usernames
+  export GS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}/gameserver/$GS_USER"
+  export GS_DATA_DIR="${XDG_DATA_HOME:-${HOME:-/tmp}/.local/share}/gameserver/$GS_USER"
+  export GS_AUTH_FILE="$GS_DATA_DIR/auth.txt"
 
   # Create data/config dirs
   for dir in "$GS_CONFIG_DIR" "$GS_DATA_DIR"; do
@@ -152,6 +153,10 @@ gameinit() {
     __gs_nuke_client
     return 1
   }
+
+  # Curl admin route for appropriate __gs_admin function
+  source <(__gs_curl_post -q api/admin msgType query) || __gs_debugmsg "Admin template failed on source"
+
 
   {% raw %}
   # This is here for compatibility before bash 4.2
