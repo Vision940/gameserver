@@ -40,6 +40,6 @@ __gs_y_or_n() {
 
   __gs_prompt "$prefix$@$suffix [y/N]" || return 1
   local resp="$REPLY"
-  [[ " y yes yup fs yerr yeah ya yep yee si evet mhm yuh yessir oui !no !n ofc fosho hai affirmative yah ez ye absolutely " =~ " ${resp,,} " ]]
+  [[ " y yes yup fs yerr yeah ya yep yee si evet mhm yuh yessir oui !no !n ofc fosho hai affirmative yah ez ye absolutely ohyeah ohyes " =~ " ${resp,,} " ]]
 }
 

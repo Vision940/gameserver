@@ -147,7 +147,6 @@ game() {
     _help_) : Open game help
       __gs_doccer
     ;;
-    __) __gs_unfound_option ;;
     *) __gs_unfound_option "$1" ;;
   esac
 }

@@ -51,8 +51,8 @@ __gs_frame() {
       fi
 
       # Get default cells without __gs_sprite cache-id for speed
-      local blank="${GSS_CELL["GENERAL_ARCADE_BAR_CELL:0:0"]}"
-      local screen="${GSS_CELL["GENERAL_GAME_BACKGROUND_CELL:0:0"]}"
+      local blank="${GSS_CELL["GENERAL_ARCADE_BAR_CELL_RAW:0:0"]}"
+      local screen="${GSS_CELL["GENERAL_GAME_BACKGROUND_CELL_RAW:0:0"]}"
 
       # Set default cells
       local x y
@@ -94,18 +94,30 @@ __gs_frame() {
 }
 
 __gs_sprite() {
+  #TODO: update to handle spr format where gs_sprite spr acts as a generator once GSS vars populated
+  # So, when gs_sprite spr is called, it sets REPLY to the next frame's RAW id or file
+  # This way we easily know what to draw next no matter what
   local action="$1"
 
   case _${action}_ in
-    _cache_)
-      local spritefile="$2"
+    _cache-spr_)
+      #TODO: Set up .spr files with values from headers and associated frames in list
+      # raw sprites are still cached but with _RAW and .spr file associative array says
+      # which raw sprs are relevant to each "animated" spr
+    ;;
+    _cache-raw_)
+      local rawfile="$2"
 
-      [[ -f "$spritefile" ]] || {
-        __gs_errormsg "Sprite file \"$spritefile\" not found in file cache"
+      [[ "$rawfile" =~ ".rawspr"$ ]] || {
+        __gs_errormsg "Sprite file \"$rawfile\" to cache-raw is not a .rawspr file"
+        return 1
+      }
+      [[ -f "$rawfile" ]] || {
+        __gs_errormsg "Sprite file \"$rawfile\" not found in file cache"
         return 1
       }
 
-      $FUNCNAME cache-id "$spritefile"
+      $FUNCNAME cache-id "$rawfile"
       local sprId="$REPLY"
 
       local text row=0 col maxw=0
@@ -118,38 +130,53 @@ __gs_sprite() {
         GSS_COLS["$sprId:$row"]=$col
         (( col > maxw )) && maxw=$col
         ((row++))
-      done < "$spritefile"
+      done < "$rawfile"
 
       GSS_ROWS["$sprId"]=$row
       GSS_WIDTH["$sprId"]=$maxw
     ;;
     _cache-id_)
-      local spritefile="$2"
+      local file="$2"
 
-      local sprId="${spritefile//\//_}"
+      local sprId="${file//\//_}"
       sprId="${sprId#*_sprites_}"
       sprId="${sprId//[- \'\"]/_}"
       sprId="${sprId%.spr}"
+      [[ "$sprId" =~ ".rawspr"$ ]] && {
+        sprId="${sprId%.rawspr}"
+        sprId+="_RAW"
+      }
       sprId="${sprId#_}"
       REPLY="${sprId^^}"
     ;;
     _cleanup_) __gs_unset_vars_from_prefixes GSS_ ;;
     _draw_)
       local id="$2"
-      #TODO: Check gsn sprite separate
+      #TODO: Check gsn sprite separate (probably meant in node draw call)
+      #Q: Is every drawn sprite a part of a node?
+      #   aka, is there any case to draw a sprite that isn't a node? probably not
+      #   need to check if this is being called by node only and if that should be
+      #   forced
       local sprite="${3:-${GSN_SPRITE["$id"]}}"
-      local spritefile="${GS_CACHE}/sprites/$sprite"
       __gs_required_args id sprite || return 2
 
+      # Determine actual frame of current spr animation to draw (rawspr)
+      local spritefile="${GS_CACHE}/sprites/$sprite"
+      $FUNCNAME get-rawspr "$spritefile"
+      spritefile="$REPLY"
+
       $FUNCNAME cache-id "$spritefile"
-      local sprId=$REPLY
-      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || $FUNCNAME cache "$spritefile" || return 1
+      local sprId="$REPLY"
+      # TODO: cache correctly here -- does draw use raw only?
+      # probably want to find the relevant raw file and draw that even if given a spr name
+      # Check if sprId has raw and find the next frame raw if not
+      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || $FUNCNAME cache-raw "$spritefile" || return 1
 
       local x0=${GSN_X0["$id"]}
       local y0=${GSN_Y0["$id"]}
       local rows=${GSS_ROWS["$sprId"]}
 
-      local base idx
+      local base idx row col cols y cell
       for (( row=0; row<rows; row++ )); do
         y=$(( y0 + row ))
         base=$(( y * COLUMNS + x0 ))
@@ -163,6 +190,28 @@ __gs_sprite() {
           GS_FRAME_CELLS[$idx]="$cell"
         done
       done
+    ;;
+    _get-rawspr_)
+      local file="$2"
+
+      if [[ ! -f "$file" ]]; then
+        #TODO: Should this priority order be different
+        # / should spr override rawspr? probably
+        [[ -f "$file.rawspr" ]] && file="$file.rawspr"
+        [[ -f "$file.spr" ]] && file="$file.spr"
+      fi
+
+      if [[ "$file" =~ ".spr"$ ]]; then
+        #TODO: Get rawspr to display based on spr
+        echo Need to generate next rawspr frame for current spr anim now 1>&2
+      fi
+
+      if [[ ! "$file" =~ ".rawspr"$ ]]; then
+        __gs_errormsg "Failed to get-rawspr $file"
+        return 1
+      fi
+
+      REPLY="$file"
     ;;
     _setup_)
       declare -gA GSS_CELL=()

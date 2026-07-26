@@ -47,7 +47,7 @@ __gs_set_passwd() {
   setPasswd=$(__gs_curl_post api/user msgType passwd password $1) || return 1
   if __gs_response_valid "$setPasswd"; then
     local key
-    key=$(__gs_parse_response ".key" "$setPasswd") || return 1
+    key=$(__gs_parse_response ".apiKey" "$setPasswd") || return 1
     __gs_api_key save "$key" || __gs_debugmsg "Could not save api key for $GS_USER"
     __gs_infomsg "Successfully logged in $GS_USER!"
   else

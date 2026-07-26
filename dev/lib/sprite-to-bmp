@@ -3,6 +3,8 @@
 # Reads sprite data from stdin and outputs a bitmap version
 # with the given palette.
 #
+# Updated by Daniel Tucker to support transparent cells where sprite has a space
+#
 # Author: Dave Eddy <dave@daveeddy.com>
 # Date: July 29, 2025
 # License: MIT

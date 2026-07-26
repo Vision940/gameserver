@@ -79,7 +79,7 @@ __gs_longopts() {
 }
 
 __gs_unfound_option() {
-  (($#)) && __gs_errormsg "Option $@ not found."
+  [[ -n $* ]] && __gs_errormsg "Option $* not found."
   __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
 }
 

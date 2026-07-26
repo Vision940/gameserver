@@ -46,8 +46,6 @@ __gs_cache() {
       unset GS_CACHE
       declare -f __gs_sprite &>/dev/null && __gs_sprite cleanup
     ;;
-    #TODO: also load sprites from sprites/default before so that game sprites overwrite
-    #TODO: default server sprite route
     _load-sprites_)
       local game="$2"
       __gs_required_args game || return 2
@@ -82,7 +80,10 @@ __gs_cache() {
       # Cache sprites
       local file
       while read -r file; do
-        __gs_sprite cache "$file"
+        __gs_sprite cache-raw "$file"
+      done < <(find ${GS_CACHE}/sprites -name "*.rawspr")
+      while read -r file; do
+        __gs_sprite cache-spr "$file"
       done < <(find ${GS_CACHE}/sprites -name "*.spr")
       return 0
     ;;
@@ -108,7 +109,7 @@ __gs_cache_log() {
     _deinit_)
       __gs_required_args -nd GS_CACHE GS_CACHE_LOG || return 1
       if [[ -f "$GS_CACHE_LOG" ]]; then
-        cat "$GS_CACHE_LOG"
+        command cat "$GS_CACHE_LOG"
         command rm -f "$GS_CACHE_LOG" 2>/dev/null
       fi
       exec 2<> $(tty)

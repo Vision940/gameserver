@@ -25,7 +25,7 @@ gensprite_main() {
   local bmptemp="${1%txt}bmp"
   local palette="${1%txt}pal"
   local defpalette="${palette%/*}/default.pal"
-  local spriteout="${1%txt}spr"
+  local spriteout="${1%txt}rawspr"
   local ascii="${1%txt}ascii"
   local sprtxttemp="${1%txt}sprtxt"
 

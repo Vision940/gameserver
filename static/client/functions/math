@@ -16,7 +16,7 @@
 ##     truncates to integer if called with -i flag
 ##     works by scaling up floating point input ARGs to integers
 ##     after doing OP on the ints, restores result to a floating-point number
-##   __gs_calc [-i] [-r RETVAR] EXPR
+##   __gs_calc [-i] [-r RETVAR] [-d 0-10] [-p] EXPR
 ##     calculate result of mathematical EXPR provided to __gs_calc
 ##     this fxn works by:
 ##       tokenizing infix EXPR
@@ -27,6 +27,8 @@
 ##       standard operator precedence / associativity
 ##     calling with -i will truncate final result to integer
 ##     calling with -r will save result to RETVAR instead of printing it
+##     calling with -d will set a fixed number of decimal places between 0-10
+##     calling with -p will limit precision to what can be handled instead of erroring
 ##
 ## Aliases:
 ##   calc EXPR
@@ -43,24 +45,34 @@ __gs_is_numeric() {
 }
 
 __gs_fp() {
-  local int=false
-  if [[ "$1" == "-i" ]]; then
-    int=true
-    shift
-  fi
+  local int=false errFxn="__gs_errormsg "
+  local opt OPTIND OPTARG
+  while getopts ':ie' opt; do
+    case "$opt" in
+      i) int=true ;;
+      e)
+        [[ "$FUNCNAME" == "${FUNCNAME[-1]}" ]] &&
+          __gs_warnmsg "$FUNCNAME is only meant to be called indirectly with -e"
+        errFxn="export _GS_FP_ERROR="
+      ;;
+      \?) break ;; # Ignore neg numbers as args
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+
   local op="$1" opsign
   [[ " mult div sub add " =~ " $op " ]] || {
-    __gs_errormsg "Invalid op to $FUNCNAME"
+    eval $errFxn"\"Invalid op '$op' to $FUNCNAME\""
     return 2
   }
   shift
 
-  __gs_required_args op
+  [[ -n "$op" ]] || return 2
   __gs_is_numeric $@ || return 2
 
   # Get fp parts
   local arg1="$1" arg2="$2"
-  __gs_required_args arg1 arg2 || return 2
+  [[ -n "$arg1" || -n "$arg2" ]] || return 2
   local fp1 fp2
   [[ "$arg1" =~ "." ]] && fp1=${arg1#*.} || fp1=''
   while [[ "$fp1" =~ 0$ ]]; do fp1=${fp1%0}; done
@@ -89,7 +101,10 @@ __gs_fp() {
 
   # Limit fp digits
   (( places > 18 )) && {
-    __gs_errormsg "Could not fp $op - too many fractional digits"
+    eval $errFxn"\"Could not fp $op - too many fractional digits\""
+    if [[ " calc __gs_calc " =~ " ${FUNCNAME[-1]} " && "$errFxn" == "__gs_errormsg " ]]; then
+      __gs_errormsg "Try running with \`${FUNCNAME[-1]} -p\` to approximate precision"
+    fi
     return 1
   }
   multiplier=$(( 10 ** places ))
@@ -118,7 +133,7 @@ __gs_fp() {
     _mult_)
       opsign='*'
       (( int1 != 0 && int2 != 0 && int1 > max / int2 )) && {
-        __gs_errormsg "Could not fp $op - overflow would occur"
+        eval $errFxn"\"Could not fp $op - overflow would occur\""
         return 1
       }
 
@@ -127,7 +142,7 @@ __gs_fp() {
     _div_)
       opsign='/'
       (( int2 == 0 )) && {
-        __gs_errormsg "Could not fp $op - division by zero"
+        eval $errFxn"\"Could not fp $op - division by zero\""
         return 1
       }
 
@@ -136,13 +151,13 @@ __gs_fp() {
       local pow=$(( places + scale2 - scale1 ))
       if (( pow >= 0 )); then
         (( int1 != 0 && int1 > max / 10 ** pow )) && {
-          __gs_errormsg "Could not fp $op - overflow would occur"
+          eval $errFxn"\"Could not fp $op - overflow would occur\""
           return 1
         }
         solution=$(( (int1 * 10 ** pow) / int2 ))
       else
         (( int2 > max / 10 ** (-pow) )) && {
-          __gs_errormsg "Could not fp $op - overflow would occur"
+          eval $errFxn"\"Could not fp $op - overflow would occur\""
           return 1
         }
         solution=$(( int1 / (int2 * 10 ** (-pow)) ))
@@ -151,7 +166,7 @@ __gs_fp() {
     _sub_)
       opsign='-'
       (( (-int2 > 0 && int1 > max + int2) || (-int2 < 0 && int1 < -max - 1 + int2) )) && {
-        __gs_errormsg "Could not fp $op - overflow would occur"
+        eval $errFxn"\"Could not fp $op - overflow would occur\""
         return 1
       }
 
@@ -161,7 +176,7 @@ __gs_fp() {
     _add_)
       opsign='+'
       (( (int2 > 0 && int1 > max - int2) || (int2 < 0 && int1 < -max - 1 - int2) )) && {
-        __gs_errormsg "Could not fp $op - overflow would occur"
+        eval $errFxn"\"Could not fp $op - overflow would occur\""
         return 1
       }
 
@@ -194,9 +209,10 @@ __gs_fp() {
 }
 
 __gs_calc() {
-  local int=false outvar decPlaces
+  __gs_setdebug $1 || shift
+  local int=false outvar decPlaces precision=false
   local opt OPTIND OPTARG
-  while getopts ':ir:d:' opt; do
+  while getopts ':ir:d:p' opt; do
     case "$opt" in
       i) int=true ;;
       r) outvar="${OPTARG:-}" ;;
@@ -207,11 +223,12 @@ __gs_calc() {
         (( decPlaces > 10 )) && decPlaces=10
         (( decPlaces < 0 )) && decPlaces=0
       ;;
+      p) precision=true ;;
       \?) break ;; # Ignore neg numbers as args
     esac
   done
   shift $(( OPTIND - 1 ))
-  local fp_func="__gs_fp"
+  local fp_func="__gs_calc__fp"
 
   local expr=${1//[[:space:]]/}
   local postfix=()
@@ -225,7 +242,7 @@ __gs_calc() {
 
   # Check if called directly
   local direct=false
-  (( ${#FUNCNAME[@]} == 1 )) && direct=true
+  [[ " calc __gs_calc " =~ " ${FUNCNAME[-1]} " ]] && direct=true
 
   __gs_calc__cleanup() {
     unset -f \
@@ -233,7 +250,9 @@ __gs_calc() {
       __gs_calc__push_number \
       __gs_calc__drain_ops \
       __gs_calc__to_postfix \
-      __gs_calc__eval_postfix
+      __gs_calc__eval_postfix \
+      __gs_calc__fp
+    unset _GS_FP_ERROR
   }
 
   __gs_calc__push_number() {
@@ -389,10 +408,10 @@ __gs_calc() {
           unset 'stack[-1]'
 
           case $token in
-            '+') $fp_func add  "$a" "$b" ;;
-            '-') $fp_func sub  "$a" "$b" ;;
-            '*') $fp_func mult "$a" "$b" ;;
-            '/') $fp_func div  "$a" "$b" ;;
+            '+') $fp_func add  "$a" "$b" || return 1 ;;
+            '-') $fp_func sub  "$a" "$b" || return 1 ;;
+            '*') $fp_func mult "$a" "$b" || return 1 ;;
+            '/') $fp_func div  "$a" "$b" || return 1 ;;
             '^')
               REPLY=1
 
@@ -436,6 +455,34 @@ __gs_calc() {
     printf -v REPLY '%s' "${stack[0]}"
   }
 
+  __gs_calc__fp() {
+    local op=$1 a=$2 b=$3
+
+    if ! $precision; then
+      __gs_fp "$op" "$a" "$b"
+      return
+    fi
+
+    # Truncate a digit from each fp value until the operation works or we have no more decimals
+    while ! __gs_fp -e "$op" "$a" "$b"; do
+      [[ $a == *.* || $b == *.* ]] || {
+        __gs_errormsg "$_GS_FP_ERROR"
+        return 1
+      }
+
+      __gs_debugmsg "Trying __gs_fp again after: $_GS_FP_ERROR" 3
+      if [[ $a == *.* ]] && { [[ $b != *.* ]] || (( ${#a} > ${#b} )); }; then
+        a=${a%?}
+        [[ $a == *. ]] && a=${a%.}
+      else
+        b=${b%?}
+        [[ $b == *. ]] && b=${b%.}
+      fi
+    done
+
+    return 0
+  }
+
   local rc
   __gs_calc__to_postfix
   rc=$?
@@ -449,8 +496,14 @@ __gs_calc() {
 
   __gs_calc__cleanup
   $int && REPLY=${REPLY%.*}
-  if [[ -n $decPlaces && $REPLY =~ ^([0-9]+)\.([0-9]{$decPlaces}) ]]; then
-    REPLY="${BASH_REMATCH[1]}${BASH_REMATCH[2]:+.${BASH_REMATCH[2]}}"
+  if [[ -n $decPlaces && $REPLY =~ ^(-?)([0-9]*)(\.([0-9]+))?$ ]]; then
+    local sign="${BASH_REMATCH[1]}"
+    local whole="${BASH_REMATCH[2]:-0}"
+    local dec="${BASH_REMATCH[4]}"
+    dec="${dec:0:$decPlaces}"
+    until (( ${#dec} == decPlaces )); do dec+="0"; done
+    REPLY="$sign$whole"
+    (( decPlaces > 0 )) && REPLY+=".$dec"
   fi
 
   if [[ -n "$outvar" ]]; then
@@ -463,6 +516,6 @@ __gs_calc() {
 
 #TODO: Add calc to man pages
 if ! command -v calc &>/dev/null; then
-  alias calc=__gs_calc
+  calc() { __gs_calc "$@"; }
 fi
 

@@ -15,6 +15,7 @@ from flask import (
 from jinja2 import TemplateNotFound
 
 from server.games.base import Game
+from server.api.api import Api
 
 
 ## Globals ##
@@ -23,6 +24,7 @@ GAME_CMDS = [game.cmd_name for game in GAME_LIST]
 GAME_DICT = {game.cmd_name: game for game in GAME_LIST}
 GAME_SOURCES = [game.source_name for game in GAME_LIST]
 GAME_SHORT_NAMES = [(game.short_name, game.cmd_name) for game in GAME_LIST if game.short_name != game.cmd_name]
+GAME_ALL_NAMES = [name for game in GAME_LIST for name in (game.source_name, game.short_name, game.cmd_name)]
 
 bp = Blueprint("games", __name__, url_prefix="/games")
 
@@ -48,7 +50,9 @@ def import_game_bps(app):
             # Find blueprint object within module and add
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if isinstance(attr, Blueprint):
+                if isinstance(attr, Api):
+                    attr.register_api(app)
+                elif isinstance(attr, Blueprint):
                     app.register_blueprint(attr)
 
 

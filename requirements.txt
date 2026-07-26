@@ -1,6 +1,5 @@
 Flask
-psycopg
-psycopg_pool
+psycopg[binary,pool]
 bcrypt
+xxhash
 waitress
-

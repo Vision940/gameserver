@@ -49,4 +49,3 @@ class Api(Blueprint):
         self.app = app
         app.register_blueprint(self)
 
-

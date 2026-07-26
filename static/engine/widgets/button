@@ -145,8 +145,8 @@ __gs_button() {
       shift 2
 
       # Determine sprites
-      local buttonSpr="widgets/button/button-${id}.spr"
-      local selSpr="widgets/button/button-selected-${id}.spr"
+      local buttonSpr="widgets/button/button-${id}"
+      local selSpr="widgets/button/button-selected-${id}"
       local customSprs=false
       local opt OPTIND OPTARG
       while getopts ':s:S:' opt; do
@@ -161,9 +161,9 @@ __gs_button() {
       # Use id sprite paths if available
       local sprPath
       for sprPath in "$buttonSpr" "$selSpr"; do
-        [[ ! -f "${GS_CACHE}/sprites/${sprPath}" ]] && {
-          buttonSpr="widgets/button/button-default.spr"
-          selSpr="widgets/button/button-selected-default.spr"
+        [[ ! -f "${GS_CACHE}/sprites/${sprPath}.rawspr" ]] && {
+          buttonSpr="widgets/button/button-default"
+          selSpr="widgets/button/button-selected-default"
           $customSprs && __gs_debugmsg "$sprPath not found, using default sprites for button \"$id\""
           break
         }
@@ -209,7 +209,7 @@ __gs_button() {
 
       # Draw text if label present
       local middleX=$(( x + ${GSN_WIDTH["$id"]} / 2 - ${#label} / 2 ))
-      local middleY=$(( y - ${GSN_HEIGHT["$id"]} / 2 ))
+      local middleY=$(( y + ${GSN_HEIGHT["$id"]} / 2 ))
       $sel && __gs_text "$middleX" "$middleY" "$label" || __gs_text "$middleX" "$middleY" "$label"
     ;;
     _setup_)

@@ -4,7 +4,9 @@
 # using the half-block character.
 #
 # Updated by Daniel Tucker to support transparent bmp and printing text instead
-# of half blocks for gameserver use cases
+#   of half blocks for gameserver use cases
+# Transparency currently is hungry and will print a full space if either
+#   bg or fg is not opaque
 #
 # Author: Ponali <ponali2k@gmail.com>
 # Date: September 02, 2025
@@ -68,9 +70,10 @@ print_half_blocks() {
                 prefix=""
             fi
 
-            # Full reset if not opaque
             _get_next_char "$sprTxtFile" "$y" "$x"
             local char="$REPLY"
+
+            # Full reset if not opaque
             if (( ${color1[3]} == 0 || ${color2[3]} == 0 )); then
               ansi=""
               char=" "

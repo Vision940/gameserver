@@ -126,6 +126,7 @@ __gs_fmt_comp_desc() {
 
       # Build description strings
       if (( maxdesclength > 0 )) && [[ -n "$desc" ]]; then
+        [[ -z "${COMPREPLY[$cidx]%%$tab*}" ]] && comp="<CR>$comp"
         if (( ${#desc} > maxdesclength )); then
           desc="${desc:0:$((maxdesclength - 1))}…"
         fi

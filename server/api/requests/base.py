@@ -1,6 +1,6 @@
 from dataclasses import dataclass, fields
 
-from server.funcs import users
+from server.funcs import user
 
 
 ## Classes ##
@@ -20,17 +20,17 @@ class ApiReq:
 
     @property
     def userId(self) -> int:
-        return users.user_id_from_username(self.user)
+        return user.user_id_from_username(self.user)
 
 
     @property
     def userProfile(self) -> dict:
-        return users.get_user(self.user)
+        return user.get_user(self.user)
 
 
     @property
     def userIsAdmin(self) -> bool:
-        return users.user_is_admin(self.user)
+        return user.user_is_admin(self.user)
 
 
     @property

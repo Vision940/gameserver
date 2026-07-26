@@ -15,7 +15,7 @@ __gs_popup_menu() {
     ;;
     _init_)
       shift 2
-      __gs_node init popup-menu "$id" -s "widgets/popup-menu/menu-box-${id}.spr" "$@" || return 2
+      __gs_node init popup-menu "$id" -s "widgets/popup-menu/menu-box-${id}" "$@" || return 2
       shift "$(( REPLY - 2 ))"
 
       local label="Menu"
@@ -48,7 +48,7 @@ __gs_popup_menu() {
 
       # Define buttons in manager
       #TODO: Configurable x offset
-      local sprites="widgets/button/button-thin.spr:widgets/button/button-selected-thin.spr"
+      local sprites="widgets/button/button-thin:widgets/button/button-selected-thin"
       local suffix=":$(( x0 + 3 )):0:$sprites"
       __gs_button_manager add-buttons "$id" "${@/%/$suffix}" || {
         __gs_errormsg "Could not init button manager"
@@ -60,6 +60,8 @@ __gs_popup_menu() {
       while IFS= read -r btn; do
         [[ -z $btn ]] && continue
         local buttonSpr="${GS_CACHE}/sprites/${GSN_SPRITE["$btn"]}"
+        __gs_sprite get-rawspr "$buttonSpr"
+        buttonSpr="$REPLY"
         __gs_sprite cache-id "$buttonSpr"
         sprHeight="${GSS_ROWS["$REPLY"]}"
         y=$(( y0 + 3 + idx * (sprHeight + 1) ))

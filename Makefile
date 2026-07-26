@@ -11,7 +11,14 @@ sprites:
 		echo 'Usage: make sprites <target>'; \
 		exit 1; \
 	fi
-	@find "$(SPRITE_DIR)" -type f -name '*.txt' -exec dev/gensprite {} \;
+	@if [ "$(TARGET)" = "all" ]; then \
+		find static/games -type d -name sprites | while read dir; do \
+			echo "Generating sprites in $$dir"; \
+			find "$$dir" -type f -name '*.txt' -exec dev/gensprite {} \;; \
+		done; \
+	else \
+		find "$(SPRITE_DIR)" -type f -name '*.txt' -exec dev/gensprite {} \;; \
+	fi
 
 test:
 	@set -e; \

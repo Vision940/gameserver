@@ -21,12 +21,12 @@ from server.api.responses.user import (
     UserWhoamiResp
 )
 
-from server.funcs import users
+from server.funcs import user
 
 
 #TODO: Log user events to user log for server
 @handles(UserUserReq)
-def user(req: UserUserReq) -> ApiResp:
+def user_init(req: UserUserReq) -> ApiResp:
     """
     Client curls this during init
 
@@ -48,12 +48,12 @@ def user(req: UserUserReq) -> ApiResp:
     # Create user if not in db and create flag provided
     if req.register and not user_info:
         auth.create_user(req.user, req.curUser, req.host)
-        if users.user_is_admin(req.user):
+        if user.user_is_admin(req.user):
             return UserResp(action="Set password", user=req.user)
         return UserResp(action="User requested", user=req.user)
 
     # User exists but create requested
-    if req.register and user_info and users.user_approved(user_info):
+    if req.register and user_info and user.user_approved(user_info):
         return UserResp(action="User exists", user=req.user, code=409)
 
     # User needs to be created
@@ -61,11 +61,11 @@ def user(req: UserUserReq) -> ApiResp:
         return UserResp(action="User not created", user=req.user, code=404)
 
     # No banned or rejected users
-    if users.user_banned_or_rejected(user_info):
+    if user.user_banned_or_rejected(user_info):
         return UserResp(action="User disavowed", user=req.user, code=403)
 
     # Users must be approved
-    if not users.user_approved(user_info):
+    if not user.user_approved(user_info):
         return UserResp(action="User pending", user=req.user, code=403)
 
     # Return set password
@@ -92,11 +92,11 @@ def login(req: UserLoginReq) -> ApiResp:
         return UserResp(valid=False, action="Invalid user", user=req.user, code=401)
 
     # Check if user banned or rejected
-    if users.user_banned_or_rejected(user_info):
+    if user.user_banned_or_rejected(user_info):
         return UserResp(valid=False, action="User disavowed", user=req.user, code=403)
 
     # Check that user is approved
-    if not users.user_approved(user_info):
+    if not user.user_approved(user_info):
         return UserResp(valid=False, action="User pending", user=req.user, code=403)
 
     # Check password is correct
@@ -128,7 +128,7 @@ def passwd(req: UserPasswdReq) -> ApiResp:
         return UserResp(valid=False, user=req.user, code=404)
 
     # Check if user banned or rejected
-    if users.user_banned_or_rejected(user_info):
+    if user.user_banned_or_rejected(user_info):
         return UserResp(valid=False, user=req.user, code=403)
 
     # Validate api key - True if password unset or key valid

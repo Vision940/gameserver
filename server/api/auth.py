@@ -12,8 +12,8 @@ import bcrypt
 from server import __version__ as SERVER_VER
 from server import db # db interactions
 
-from server.funcs import users # public user functions
-from server.games.games import GAME_DICT # game info dict
+from server.funcs import user # public user functions
+from server.games.games import GAME_DICT, GAME_ALL_NAMES # game info
 
 from server.api.responses.base import ErrorResp # api response obj
 
@@ -25,7 +25,7 @@ if not SERVER_SECRET:
 API_KEY_LIFETIME_DAYS = 90
 
 
-def validate_api_req(req: ApiReq, key_check=True, admin_check=False):
+def validate_api_req(req: ApiReq, key_check=True, admin_check=False, game_source=None):
     """
     This function returns a response only if the req is invalid, otherwise None
 
@@ -41,8 +41,8 @@ def validate_api_req(req: ApiReq, key_check=True, admin_check=False):
     resp = None
 
     cur_ver = SERVER_VER
-    if req.caller in GAME_DICT:
-        cur_ver = GAME_DICT[req.caller].version
+    if req.caller in GAME_ALL_NAMES and game_source:
+        cur_ver = GAME_DICT[game_source].version
 
     if req.version != cur_ver:
         # Check against current server/game ver
@@ -51,7 +51,7 @@ def validate_api_req(req: ApiReq, key_check=True, admin_check=False):
         # Key check should happen for every request except /login and /user
         # Only error out on key check if user exists
         resp = ErrorResp(error="Invalid API key", errType="oldkey", code=403)
-    elif admin_check and not users.user_is_admin(req.user):
+    elif admin_check and not user.user_is_admin(req.user):
         resp = ErrorResp(error="User not admin", errType="notadmin", code=403)
 
     return resp
@@ -111,7 +111,7 @@ def validate_key(username, api_key):
     if not user_info['password_hash']:
         return True
 
-    if not api_key or api_key.lower() == "null" or users.user_banned_or_rejected(user_info):
+    if not api_key or api_key.lower() == "null" or user.user_banned_or_rejected(user_info):
         return False
 
     with db.db_cursor() as cursor:
@@ -164,7 +164,7 @@ def validate_key(username, api_key):
 
 
 def create_api_key(username):
-    user_id = users.user_id_from_username(username)
+    user_id = user.user_id_from_username(username)
     raw_key = generate_api_key()
     key_hash = hash_api_key(username, raw_key)
 
@@ -235,7 +235,7 @@ def create_user(username, cur_user, hostname):
     Games are intended to only import public-facing users module
     """
 
-    status = "approved" if users.user_is_admin(username) else "requested"
+    status = "approved" if user.user_is_admin(username) else "requested"
 
     return db.fetch_row(
         """

@@ -2,7 +2,7 @@
 
 ## dev/lib/text-sprite ##
 ##
-## text-sprite provides support to draw text onto sprites in their .spr files
+## text-sprite provides support to draw text onto sprites in their .rawspr files
 ##
 ## This is called in the sprite generation process if a <sprName>.ascii file
 ##   exists

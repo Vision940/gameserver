@@ -19,6 +19,8 @@ if ! declare -f __gs_{{ game.cmd_name }}_main &>/dev/null && {{ game.has_main | 
 fi
 
 GS_{{ game.cmd_name | upper | replace('-', '_') }}_VER={{ game.version }}
+GS_{{ game.source_name | upper | replace('-', '_') }}_VER={{ game.version }}
+GS_{{ game.short_name | upper | replace('-', '_') }}_VER={{ game.version }}
 
 # Source game imports
 __gs_{{ game.cmd_name }}_imports() {
@@ -50,7 +52,6 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
     return 1
   fi
 
-  #TODO: add getopt parsing for --quiet, --help, etc
   case _$1_ in
     {% if game.has_main %}
     _play_) : Play the game
@@ -70,8 +71,7 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
       if declare -f {{ game.default_cmd.split(' ')[0] }} &>/dev/null; then
         {{ game.default_cmd }} "$@"
       else
-        __gs_errormsg "Option $1 not found."
-        __gs_infomsg "Run \`${FUNCNAME[-1]} help\` for help!"
+        __gs_unfound_option "$1"
         return 1
       fi
     ;;

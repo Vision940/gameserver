@@ -40,7 +40,7 @@ class GameContext:
 
 
     def validate_api_req(self, request, admin_check=False):
-        return validate_api_req(request, key_check=True, admin_check=admin_check)
+        return validate_api_req(request, key_check=True, admin_check=admin_check, game_source=self.config.cmd_name)
 
 
 class GameContextProxy:

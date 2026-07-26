@@ -15,6 +15,10 @@
 ##     function that formats simple input keys/vals as a json string
 ##     calling with KEY1 VAL1 KEY2 VAL2 prints '{"KEY1":"VAL1","KEY2":"VAL2"}'
 ##     simple json output is nestable with VAL=$(__gs_json_content [KEY VAL [...]])
+##   __gs_form_content [KEY VAL [KEY VAL [...]]]
+##     function that formats simple input keys/vals as '-F KEY=VAL'
+##     calling with KEY1 VAL1 KEY2 VAL2 prints 'KEY1":"VAL1","KEY2":"VAL2"}'
+##     simple json output is nestable with VAL=$(__gs_json_content [KEY VAL [...]])
 ##   __gs_curl_post [-q] ROUTE [KEY VAL [KEY VAL [...]]]
 ##     function that curls server with POST request to GS_URL/ROUTE
 ##     uses KEY/VAL pairs entered to call __gs_json_content and adds result to msg
@@ -44,6 +48,9 @@
 ##                          creates user if CREATE is populated
 ##       _login_ PASSWD: logs in to server and handles possible errors
 ##                       allows users to set password on first login
+##   __gs_ping
+##     function to test if server is up and running
+##     returns non-zero if ping fails
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -78,6 +85,9 @@ __gs_api_key() {
 }
 
 __gs_json_content() {
+  local -n _data=$1
+  shift
+
   (( $# % 2 == 1 )) && return 1
 
   local args=()
@@ -95,15 +105,37 @@ __gs_json_content() {
     args+=("--arg$json" "$key" "$val")
   done
 
-  jq -cn "${args[@]}" '$ARGS.named'
+  local json="$(jq -cn "${args[@]}" '$ARGS.named')"
+  _data+=(
+    -m 2
+    -H "Content-Type: application/json"
+    -d "$json"
+  )
+}
+
+__gs_form_content() {
+  local -n _data=$1
+  shift
+
+  (( $# % 2 == 1 )) && return 1
+
+  local key val json
+  while (($#)); do
+    key=$1
+    val=$2
+    shift 2
+
+    _data+=("-F" "$key=$val")
+  done
 }
 
 __gs_curl_post() {
-  local quiet=false
+  local quiet=false function=__gs_json_content
   local opt OPTIND OPTARG
-  while getopts ':q' opt; do
+  while getopts ':qf' opt; do
     case "$opt" in
       q) quiet=true ;;
+      f) function=__gs_form_content ;;
     esac
   done
   shift $(( OPTIND - 1 ))
@@ -118,31 +150,28 @@ __gs_curl_post() {
   local verVar="GS_${caller^^}_VER"
   local version="${!verVar:-$GS_SERVER_VER}"
 
-  # Populate json with defaults and opts
-  local json
-  json="$(
-    __gs_json_content "${@:2}" \
-      user "$GS_USER" \
-      apiKey "${GS_API_KEY:-}" \
-      version "$version" \
-      caller "$caller" \
-      curUser "$GS_CURUSER" \
-      host "${HOSTNAME:-$(hostname 2>/dev/null || command cat /etc/hostname 2>/dev/null || echo unknown)}"
-  )" || return 1
+  # Populate data with defaults and opts
+  local data=()
+  $function data "${@:2}" \
+    user "$GS_USER" \
+    apiKey "${GS_API_KEY:-}" \
+    version "$version" \
+    caller "$caller" \
+    curUser "$GS_CURUSER" \
+    host "${HOSTNAME:-$(hostname 2>/dev/null || command cat /etc/hostname 2>/dev/null || echo unknown)}" || return 1
 
-  __gs_debugmsg "Requesting $GS_URL/$route with $json" 5
+  __gs_debugmsg "Requesting $GS_URL/$route with ${data[*]}" 5
 
   local response
   local curlArgs=""
   $quiet && curlArgs+="-f"
-  response=$(
-    curl -sL -m 2 \
+  response="$(
+    curl -sL \
       -X POST \
-      -H "Content-Type: application/json" \
-      -d "$json" \
+      "${data[@]}" \
       ${curlArgs:+"$curlArgs"} \
       "$GS_URL/$route"
-  ) || return 1
+  )" || return 1
 
   __gs_debugmsg "resp: $response" 6
 
@@ -201,7 +230,7 @@ __gs_request() {
   case _$1_ in
     __apikey__)
       local register="${2:+true}"
-      response=$(__gs_curl_post api/user msgType user register "${register:-false}") || return 1
+      response=$(__gs_curl_post api/user msgType user version $GS_SERVER_VER register "${register:-false}") || return 1
       local key=$(__gs_parse_response ".apiKey // null" "$response" off)
       local action=$(__gs_parse_response ".action // null" "$response" off)
 
@@ -319,5 +348,9 @@ __gs_request() {
       return 1
     ;;
   esac
+}
+
+__gs_ping() {
+  [[ "gs-pong" == "$(curl -m 0.2 -sfL "$GS_URL/ping")" ]]
 }
 

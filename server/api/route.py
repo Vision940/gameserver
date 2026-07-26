@@ -19,13 +19,15 @@ from server.api.responses.base import ErrorResp
 class ApiRoute(Blueprint):
     def __init__(self, route, path="server.api", origin="gameserver",
                  version=SERVER_VER):
-        super().__init__(route, __name__, url_prefix=f"/{route}")
+        super().__init__(route.replace('/', '_'), __name__, url_prefix=f"/{route}")
+
+        local_route = route.rsplit('/', 1)[-1]
         try:
-            import_module(f"{path}.requests.{route}")
-            import_module(f"{path}.handlers.{route}")
-            import_module(f"{path}.responses.{route}")
+            import_module(f"{path}.requests.{local_route}")
+            import_module(f"{path}.handlers.{local_route}")
+            import_module(f"{path}.responses.{local_route}")
         except ModuleNotFoundError as e:
-            print(f"FATAL: Could not import {path}.(requests|handlers|responses).{route}: {e}")
+            print(f"FATAL: Could not import {path}.(requests|handlers|responses).{local_route}: {e}")
             sys.exit(1)
         self.add_url_rule("/", view_func=self._post, methods=["POST"])
         self.route = route

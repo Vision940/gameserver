@@ -25,6 +25,7 @@ app.register_blueprint(games.bp)
 app.register_blueprint(man.bp)
 api_routes = [
     "admin",
+    "file",
     "user"
 ]
 api = Api(*api_routes, name="api")
@@ -57,6 +58,11 @@ def index():
     )
 
     return Response(script, mimetype="text/plain")
+
+
+@app.route('/ping')
+def ping():
+    return Response("gs-pong", mimetype="text/plain")
 
 
 ##############

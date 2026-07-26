@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
 #TODO: docs
+# widgets are nodes with predefined behavior and options
+# nodes are elements put on screen in game with behavior and interactions
+# sprites are the graphic representation of a node on screen during a game
+# sprites have raw frames that are managed in the sprite engine based on 
+#   predefined behavior for rendering that sprite per frame
+
+
 GS_WIDGET_TYPES="{button,popup-menu}"
 
 #TODO: does test-collision go in node manager?
@@ -34,6 +41,31 @@ __gs_node_manager() {
   esac
 }
 
+#TODO: Big change: draw should probably be in node
+# The node is the thing interacting with the frame
+# The gs_sprite function should really just control the state of the node's animations
+# AKA, this is a good flow:
+#  - node needs to be printed to screen
+#  - node knows position and sprite id
+#  - node asks gs_sprite for current raw spr id to draw
+#  - gs_sprite says based on this id, draw this next
+#  - node says okay, draws into frame cells
+# this makes sense because widgets extend nodes, to an extent
+# ex if a button wants to draw itself, it should call draw on gs_button
+# gs_button would say "okay underlying node, draw me"
+# then gs_button would call gs_text to do its button-specific labelling
+# This way, the sprite function acts as more of an art manager and all functional node interaction with the screen/game is controlled in the node itself
+#
+#
+# So, just as scenes control the frame, nodes control sprites
+# This makes the graphics import more of a utility to be controlled by the driving elements of a game
+# A game is made up of scenes that interact with events and frames
+# A scene is made up of nodes that interact with sprites and text on screen
+# The node is subject to events subscribed to by the scene, which changes its animation/behavior state
+# So a game like hilo would have a play scene that is populated by nodes rendered through sprites
+# The scene changes node states based on subscribed events
+# so nodes are dumb and sprites are dumber
+# the node can make handling itself easier, as with buttons/popups, where it provides handling helpers to the scene
 __gs_node() {
   local action="$1"
   __gs_required_args action || return 2
@@ -56,43 +88,64 @@ __gs_node() {
         esac
       done
       local endreply=$(( OPTIND - 1 ))
-      (( endrepy < 0 )) && endreply=0
+      (( endreply < 0 )) && endreply=0
 
       __gs_required_args s || return 2
 
-      local spritefile="${GS_CACHE}/sprites/${s}"
+      # Need to get-rawspr here instead
+      # Or get default anim
+      local spritefile="${GS_CACHE}/sprites/${s}.rawspr"
       [[ ! -f "$spritefile" ]] && {
         __gs_errormsg "Sprite \"$spritefile\" doesn't exist"
         return 1
       }
+      # The below todo is saying that this check^ needs to instead check for what the passed
+      # in sprite is -- is it just a rawspr file or is there a spr file with anims?
+      # We need to treat rawsprs passed in as static infinite spr -- this can be
+      # implicit with the get-rawspr checks, as without a spr file the rawspr is just returned
 
+      # the only difference when something is a spr is the dirty frame counter gets increased based on behavior of the spr
+      # aka, get-rawspr can evaluate spr files for how to increment the counter
+      # this way all node needs to know is "this id is my spr" and say "draw spr"
+      # and then get-rawspr adjusts/handles env var associative arrays as needed
+
+      #Original TODO: If a sprite passed in has rawspr and not spr,
+      # then we need to "make a sprite" for that rawspr file.
+      # This should be a __gs_sprite rawasspr or something that sets up a default valued spr with one frame that is static infinite
+      # This way we don't need to generate spr if there is no anim but can still set a sprite value per node as spr or rawspr
+
+      # The below should probably be in get-rawspr, although as-is all raw sprs should be cached
       __gs_sprite cache-id "$spritefile"
       local sprId="$REPLY"
-      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || __gs_sprite cache "$spritefile" || return 1
+      [[ -n ${GSS_ROWS["$sprId"]+_} ]] || __gs_sprite cache-raw "$spritefile" || return 1
 
+      # These need to be dynamic for the entire set of frames in the spr
       w=${GSS_WIDTH[$sprId]}
       h=${GSS_ROWS[$sprId]}
       __gs_required_args w h || return 2
 
-      local xOffset=$(( w / 2 + w % 2 ))
-      local yOffset=$(( h / 2 - h % 2 ))
-      local xCenter=$(( COLUMNS / 2 - xOffset ))
-      local yCenter=$(( LINES / 2 - yOffset ))
-      $centered && x=c y=c
-      __gs_required_args x y || return 2
-
       # Use c as center position and resolve equation inputs
-      __gs_calc -ir x "${x//c/$xCenter}" || return 1
-      __gs_calc -ir y "${y//c/$yCenter}" || return 1
+      $centered && x=c y=c
+      if [[ "$x" =~ "c" ]]; then
+        local xOffset=$(( w / 2 + w % 2 ))
+        local xCenter=$(( COLUMNS / 2 - xOffset ))
+        __gs_calc -ir x "${x//c/$xCenter}" || return 1
+      fi
+      if [[ "$y" =~ "c" ]]; then
+        local yOffset=$(( h / 2 - h % 2 ))
+        local yCenter=$(( LINES / 2 - yOffset ))
+        __gs_calc -ir y "${y//c/$yCenter}" || return 1
+      fi
       __gs_required_args x y || return 2
 
+      # Init position variables for this node
       GSN_TYPE["$id"]="$type"
       GSN_X0["$id"]="$x"
       GSN_Y0["$id"]="$y"
-      GSN_WIDTH["$id"]="$w"
-      GSN_HEIGHT["$id"]="$h"
+      GSN_WIDTH["$id"]="$w" # Need to call gs_sprite to get max w for spr
+      GSN_HEIGHT["$id"]="$h" # Need to call gs_sprite to get max h for spr
       GSN_SPRITE["$id"]="$s"
-      GSN_VISIBLE["$id"]=1
+      GSN_VISIBLE["$id"]=1 # Do we need visible?
       GSN_PARENT["$id"]=""
       GSN_CHILDREN["$id"]=""
 
@@ -119,9 +172,7 @@ __gs_node() {
             'GSW_BTNMAN["$id"]' \
             'GSW_BTNMAN_SEL["$id"]' \
         ;;
-        popup-menu)
-          :
-        ;;
+        popup-menu) : ;;
       esac
 
       # Destroy GSN vars at id

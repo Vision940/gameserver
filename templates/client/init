@@ -12,6 +12,10 @@
 ##   source <(curl -sfL SERVER-URL) OPTS
 ##
 ## Functions:
+##   __gs_xdg_dir TYPE DIR
+##     function to set up data/config/state dirs
+##     games can call this to create paths on startup for storing relevant data
+##     gs xdg dirs are represented by GS_<type>_DIR in the client env
 ##   __gs_source_file PATH ROUTE
 ##     function to source file from server at URL/ROUTE/PATH
 ##     default ROUTE is static/client
@@ -63,6 +67,7 @@ __gs_deps_check() {
     tar
     find
     grep
+    xxhsum
   )
 
   # Check for possibly missing dependencies
@@ -117,10 +122,11 @@ gameinit() {
   #   as users can log in from different homes/machines/usernames
   export GS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}/gameserver/$GS_USER"
   export GS_DATA_DIR="${XDG_DATA_HOME:-${HOME:-/tmp}/.local/share}/gameserver/$GS_USER"
+  export GS_STATE_DIR="${XDG_STATE_HOME:-${HOME:-/tmp}/.local/state}/gameserver/$GS_USER"
   export GS_AUTH_FILE="$GS_DATA_DIR/auth.txt"
 
   # Create data/config dirs
-  for dir in "$GS_CONFIG_DIR" "$GS_DATA_DIR"; do
+  for dir in "$GS_CONFIG_DIR" "$GS_DATA_DIR" "$GS_STATE_DIR"; do
     command mkdir -m 755 -p "$dir" &>/dev/null || {
       echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Could not create directory at $dir." 1>&2
       return 1
@@ -130,6 +136,23 @@ gameinit() {
       return 1
     }
   done
+  __gs_xdg_dir() {
+    local type="$1"
+    local dir="$2"
+    local target="GS_${type^^}_DIR"
+
+    [[ " config data state " =~ " ${type,,} " ]] || return 1
+    dir="${!target}/$dir"
+
+    command mkdir -m 755 -p "$dir" &>/dev/null || {
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Could not create directory at $dir." 1>&2
+      return 1
+    }
+    [[ -d "$dir" ]] || {
+      echo -e "gameserver: [\033[31;1mFATAL ERROR\033[0m] Location $dir is not a directory." 1>&2
+      return 1
+    }
+  }
 
   # Source game command
   __gs_source_file game || {
