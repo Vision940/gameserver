@@ -1,6 +1,6 @@
 import os
 
-from server import json # json file handling
+from server.funcs import json # json file handling
 
 
 ## Classes ##

@@ -27,7 +27,7 @@ api_routes = [
     "admin",
     "user"
 ]
-api = Api(*api_routes)
+api = Api(*api_routes, name="api")
 api.register_api(app)
 
 # Initialize game blueprints

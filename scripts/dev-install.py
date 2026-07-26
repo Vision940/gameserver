@@ -12,7 +12,7 @@ ROOT = os.path.abspath(f"{os.path.dirname(os.path.abspath(__file__))}/..")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from server import json  # load_json/save_json helpers
+from server.funcs import json  # load_json/save_json helpers
 
 
 def dev_install():

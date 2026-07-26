@@ -35,7 +35,7 @@ def import_game_bps(app):
     """
 
     for game_dir in os.listdir('static/games'):
-        bp_dir = f'static/games/{game_dir}'
+        bp_dir = f'static/games/{game_dir}/server'
 
         if not os.path.isdir(bp_dir):
             continue

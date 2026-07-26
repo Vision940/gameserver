@@ -4,7 +4,7 @@ import sys
 
 from collections import namedtuple
 
-from server import json
+from server.funcs import json
 
 Config = namedtuple('Config', ['host', 'port', 'admins'])
 

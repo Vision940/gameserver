@@ -3,8 +3,6 @@ from typing import dataclass_transform
 
 from flask import jsonify, Response
 
-from server import __version__ as SERVER_VER
-
 
 ## Functions ##
 @dataclass_transform(kw_only_default=True)
@@ -24,8 +22,8 @@ class ApiResp:
     Basic response message class
     """
 
-    origin: str = "gameserver"
-    version: str = SERVER_VER
+    origin: str = field(init=False)
+    version: str = field(init=False)
     valid: bool = True
     code: int = 200
 

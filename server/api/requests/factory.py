@@ -5,11 +5,12 @@ from flask import request
 
 
 class RequestFactory:
-    def __init__(self, req: request, route=None):
+    def __init__(self, req: request, route=None, path="server.api"):
         self.data = req.get_json(silent=True) or {}
         self.route = route or req.path.rstrip("/").split("/")[-1]
         self.msg_type = self.data.get("msgType")
         self.error = None
+        self.path = path
 
 
     def build(self):
@@ -61,7 +62,7 @@ class RequestFactory:
             return None
 
         # Check for class name in route's requests module
-        module = import_module(f"server.api.requests.{self.route}")
+        module = import_module(f"{self.path}.requests.{self.route}")
         class_name = "".join(
             part[0].upper() + part[1:] if len(part) > 1 else part.upper()
             for part in [self.route, self.msg_type, "Req"]

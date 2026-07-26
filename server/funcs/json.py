@@ -3,6 +3,7 @@ import os
 import tempfile
 
 
+## Functions ##
 def load_json(path):
     if not os.path.exists(path):
         return {}
