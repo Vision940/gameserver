@@ -3,5 +3,6 @@ init-hook = "import sys; sys.path.insert(0, '.')"
 [tool.pylint.messages_control]
 disable = [
     "missing-module-docstring",
-    "multiple-statements"
+    "multiple-statements",
+    "trailing-newlines"
 ]

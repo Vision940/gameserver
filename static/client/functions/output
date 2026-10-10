@@ -20,6 +20,7 @@
 ##     the intended use case for this function is to consistently, prettily
 ##       format json response data for gs commands that interact with the db
 ##       through flask
+#TODO: doc new fxns
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -55,44 +56,91 @@ __gs_json_to_table() {
   done
 
   # Parse response from server into rows of data
-  local tableData
-  tableData=$(__gs_parse_response "(.${data}${array} | [$columns]) | @tsv" "$json") || return 1
+  local tsv
+  tsv=$(__gs_parse_response "(.${data}${array} | [$columns]) | @tsv" "$json") || return 1
 
   # Sort table by first column, numerically if id is first
-  sortArgs="-f -k 1"
+  local sortArgs="-f -k 1"
   [[ "$columns" =~ ^".id" ]] && sortArgs+=" -n"
-  tableData=$(sort $sortArgs <<<"$tableData") || {
+  tsv=$(sort $sortArgs <<<"$tsv") || {
     __gs_errormsg "Unable to sort output table"
     return 1
   }
 
   # This is fine, we just let the user know
-  [[ -z "$tableData" ]] && {
+  [[ -z "$tsv" ]] && {
     __gs_infomsg "No data to display for ${data}$array"
     return 0
   }
 
+  __gs_print_table "$tsv" "$headers"
+}
+
+__gs_data_table() {
+  local rowHeader="$1"
+  local -n _rows="$2"
+  local -n _cols="$3"
+  local -n _data="$4"
+
+  __gs_required_args -v rowHeader _rows _cols _data
+
+  ((${#_cols[@]})) || {
+    __gs_errormsg "No columns supplied to $FUNCNAME"
+    return 1
+  }
+
+  ((${#_rows[@]})) || {
+    __gs_infomsg "No rows supplied to $FUNCNAME"
+    return 0
+  }
+
+  # Build comma-separated header list for column(1)
+  local headers="${rowHeader:- }"
+  local col
+  for col in "${_cols[@]}"; do
+    headers+=",$col"
+  done
+
+  # Build tab-separated table data
+  local tsv=""
+  local r c line
+  for r in "${!_rows[@]}"; do
+    line="${_rows[r]}"
+
+    for c in "${!_cols[@]}"; do
+      line+=$'\t'"${_data[$r:$c]-}"
+    done
+
+    tsv+="${tsv:+$'\n'}$line"
+  done
+
+  __gs_print_table "$tsv" "$headers"
+}
+
+__gs_print_table() {
+  local tsv="$1" headers="$2"
+
   # Format and add headers
-  tableData="$(column -t -N "$headers" -s $'\t' <<<"$tableData")" || {
+  tsv="$(column -t -N "$headers" -s $'\t' <<<"$tsv")" || {
     __gs_errormsg "Unable to format output table"
     return 1
   }
 
-  local longest len
-  while read -r line; do
+  local longest=0 len line
+  while IFS= read -r line; do
     len=${#line}
     (( longest < len )) && longest=$len
-  done <<<"$tableData"
-  longest=$(( longest + 4 ))
+  done <<<"$tsv"
+  (( longest += 4 ))
 
   local colors=($'\e[0m' $'\e[48;2;88;88;88m')
   local reset=$'\e[0m'
   local idx=0
-  while read -r line; do
-    printf "%s" "${colors[$((idx % 2))]}"
-    printf "%-*s" "$longest" "  $line"
-    printf "%s\n" "$reset"
+  while IFS= read -r line; do
+    printf '%s' "${colors[idx % 2]}"
+    printf '%-*s' "$longest" "  $line"
+    printf '%s\n' "$reset"
     ((idx++))
-  done <<<"$tableData"
+  done <<<"$tsv"
 }
 

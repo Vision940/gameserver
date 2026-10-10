@@ -99,7 +99,7 @@ __gs_json_content() {
     shift 2
 
     json=""
-    [[ "$val" =~ ^"{" ]] && json="json"
+    [[ "$val" == \{* || "$val" == \[* ]] && json="json"
     [[ " false true " =~ " $val " ]] && json="json"
 
     args+=("--arg$json" "$key" "$val")
@@ -195,6 +195,7 @@ __gs_parse_response() {
 __gs_check_resp() {
   local jsonResp="$1"
   local errType=$(__gs_parse_response ".errType // null" "$jsonResp" off)
+  local errMsg=$(__gs_parse_response ".error // null" "$jsonResp" off)
 
   case "$errType" in
     badreq)
@@ -213,6 +214,7 @@ __gs_check_resp() {
       __gs_errormsg "\"Sir, this is a restricted area!\""
       __gs_errormsg "Only admins are allowed to run this command."
     ;;
+    *) [[ "$errMsg" != "null" ]] && __gs_errormsg "$errMsg" ;;
   esac
   [[ "$errType" != "null" ]] && return 1
   return 0

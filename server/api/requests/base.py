@@ -1,4 +1,5 @@
 from dataclasses import dataclass, fields
+from typing import get_args
 
 from server.funcs import user
 
@@ -35,8 +36,11 @@ class ApiReq:
 
     @property
     def null_fields(self) -> list[str]:
+        def allows_none(field_type):
+            return type(None) in get_args(field_type)
+
         return [
             f.name for f in fields(self)
-            if getattr(self, f.name) is None
+            if getattr(self, f.name) is None and not allows_none(f.type)
         ]
 

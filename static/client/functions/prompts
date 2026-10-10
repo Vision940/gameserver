@@ -20,7 +20,7 @@
 ##
 
 __gs_prompt() {
-  read -r -t 10 -p "$@ " || return
+  read -r -t 10 -p "$(echo -e "$@ ")" || return
   [[ -n "$REPLY" ]]
 }
 

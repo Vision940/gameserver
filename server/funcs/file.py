@@ -86,3 +86,17 @@ def hash_file(filepath):
 def remove_file(filepath: str | Path):
     Path(filepath).unlink(missing_ok=True)
 
+
+def move_file(filepath: str | Path, directory: str | Path) -> Path | ErrorResp:
+    src_path = Path(filepath)
+    if not src_path.exists():
+        return ErrorResp(error=f"File {src_path.name} missing on server", errType="filemissing", code=500)
+
+    dest_dir = Path(directory)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / src_path.name
+
+    # Default to overwrite existing files
+    os.replace(src_path, dest_path)
+    return dest_path
+

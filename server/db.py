@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-#TODO: from flask import g and save g.pool for pool
 _pool = None
 
 
@@ -130,6 +129,21 @@ def fetch_col(query, params=None, col="id", cursor=None):
     if col not in row:
         raise KeyError(f"Column {col!r} not found in returned row")
     return row[col]
+
+
+def fetch_cols(query, params=None, col="id", cursor=None):
+    """
+    Function to execute a statement and get a value from each returned row
+    Uses optional col input as key name if the returned rows have multiple columns
+    """
+
+    rows = execute(query, params, fetch="all", cursor=cursor)
+    if not rows: return None
+    if len(rows[0]) == 1:
+        return [next(iter(row.values())) for row in rows]
+    if col not in rows[0]:
+        raise KeyError(f"Column {col!r} not found in returned rows")
+    return [row[col] for row in rows]
 
 
 def fetch_row(query, params=None, cursor=None):

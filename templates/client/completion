@@ -43,10 +43,10 @@ _{{ game }}() {
   local completions=()
   if (( COMP_CWORD == 1 )); then
     # Get options (and descriptions if available)
-    mapfile -t completions < <(declare -f {{ game }} | sed -ne '/^\s.*)$/,+1 { /)$/N;s/\s*_\(.*\)_)\(\n\s\+ : \(.*\);\)\{0,1\}.*/\1\t\3/p; }' | grep -v [*_] | sed -e 's/\t$//g')
+    mapfile -t completions < <(declare -f {{ game }} | sed -ne '/^\s.*)$/,+1 { /)$/N;s/\s*_\(.*\)_)\(\n\s\+ : \(.*\)\)\{0,1\}.*/\1\t\3/p; }' | grep -v [*_] | sed -e 's/;$//g' -e 's/\t$//g')
   elif (( COMP_CWORD == 2 )); then
     # Get suboptions (and descriptions if available)
-    mapfile -t completions < <(declare -f {{ game }} | sed -ne "\|^\\s*_.*$3_.*_)$|,+1 { /)$/N;s|\\s*_$3"'_\(.*\)_)\(\n\s\+ : \(.*\);\)\{0,1\}.*|\1\t\3|p; }' | grep -v [*_] | sed -e 's/\t$//g')
+    mapfile -t completions < <(declare -f {{ game }} | sed -ne "\|^\\s*_.*$3_.*_)$|,+1 { /)$/N;s|\\s*_$3"'_\(.*\)_)\(\n\s\+ : \(.*\)\)\{0,1\}.*|\1\t\3|p; }' | grep -v [*_] | sed -e 's/;$//g' -e 's/\t$//g')
   fi
 
   __gs_comp_resp "$2" "${completions[@]}"
