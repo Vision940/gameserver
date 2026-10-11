@@ -67,7 +67,6 @@ __gs_deps_check() {
     tar
     find
     grep
-    xxhsum
   )
 
   # Check for possibly missing dependencies

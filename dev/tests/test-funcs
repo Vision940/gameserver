@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+_assert() {
+  while [[ "$1" == "-e" ]]; do
+    shift
+    eval "local $1"
+    shift
+  done
+
+  local fxn=$1
+  shift
+  local expected="$1"
+  shift
+
+  local got
+  got="$($fxn "$@" 2>&1)"
+  local status=$?
+
+  # Try to get REPLY if fxn output nothing
+  [[ -z "${got:-}" ]] && {
+    $fxn "$@" 2>&1
+    status=$?
+    got="$REPLY"
+  }
+
+  ((total++))
+  if ( (( status == 0 )) || [[ -n "$ASSERT_IGNORE_RET" ]] ) && [[ "$got" == "$expected" ]]; then
+    ((pass++))
+    printf 'ok   %-30s -> %s\n' "$*" "${got//[$'\n\r\t']/ }"
+  else
+    ((fail++))
+    printf 'FAIL %-30s -> got=[%s] expected=[%s] status=%s\n' \
+      "$*" "$got" "$expected" "$status"
+  fi
+}
+
+_assert_fail() {
+  while [[ "$1" == "-e" ]]; do
+    shift
+    eval "local $1"
+    shift
+  done
+
+  local fxn=$1
+  shift
+
+  local got
+  got="$($fxn "$@" 2>/dev/null)"
+  local status=$?
+
+  # Try to get REPLY if fxn output nothing
+  [[ -z "${got:-}" ]] && {
+    $fxn "$@" 2>/dev/null
+    status=$?
+    got="$REPLY"
+  }
+
+  ((total++))
+  if (( status != 0 )); then
+    ((pass++))
+    printf 'ok   %-30s -> failed as expected (status=%s)\n' "$*" "$status"
+  else
+    ((fail++))
+    printf 'FAIL %-30s -> expected failure, got=[%s]\n' "$*" "${got//[$'\n\r\t']/ }"
+  fi
+}
+

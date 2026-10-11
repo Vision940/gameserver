@@ -22,7 +22,7 @@ sprites:
 
 test:
 	@set -e; \
-	for test_file in "$(TEST_DIR)"/*.bash; do \
+	for test_file in "$(TEST_DIR)"/*.sh; do \
 		[ -e "$$test_file" ] || continue; \
 		echo "Running $$test_file"; \
 		bash "$$test_file"; \

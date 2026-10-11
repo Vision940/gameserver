@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+
+#########################################################################
+#  xxHash - Fast Hash algorithm
+#  Copyright (C) 2012-2016, Yann Collet
+#  Copyright (C) 2019, easyaspi314
+#  Copyright (C) 2026, Daniel Tucker (updated for gameserver)
+#
+#  BSD 2-Clause License (http://www.opensource.org/licenses/bsd-license.php)
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are
+#  met:
+#
+#  * Redistributions of source code must retain the above copyright
+#  notice, this list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above
+#  copyright notice, this list of conditions and the following disclaimer
+#  in the documentation and/or other materials provided with the
+#  distribution.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+#  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+#  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+#  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+#  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+#  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+#  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+#  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+#  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+#  You can contact the author at :
+#  - xxHash homepage: http://www.xxhash.com
+#  - xxHash source repository : https://github.com/Cyan4973/xxHash
+#########################################################################
+
+# Idea of this is to support xxhsum even if it isn't installed
+# There will be significant slowdown if it isn't installed and files are large
+# This could definitely be better optimized, but it isn't expected to be
+#   the primary method of hashing
+# It is really here because it is cool, but also as a useful fallback to reduce
+#   dependencies
+
+xxhsum() {
+  # Runs xxhsum command if available with all args
+  # Bash version supports multiple filename args with -H0 or -H1
+  # To force bash version, set USE_GS_XXHSUM in env or on call
+
+  [[ -z "$USE_GS_XXHSUM" ]] && command xxhsum --help &>/dev/null && { command xxhsum "$@"; return; }
+  declare -f __gs_debugmsg &>/dev/null && __gs_debugmsg "Using bash xxhsum"
+  declare -f __gs_warnmsg &>/dev/null || __gs_warnmsg() { echo "WARN: $@"; }
+
+  local algorithm=__gs_xxh64
+  if (( $# > 1 )) && [[ "$1" =~ "-H"[01] ]]; then
+    case "$1" in
+      -H0) algorithm=__gs_xxh32 ;;
+      -H1) algorithm=__gs_xxh64 ;;
+    esac
+    shift
+  fi
+
+  ! (($#)) && {
+    echo "No input provided " 1>&2
+    return 1
+  }
+
+  local file
+  for file; do
+      [[ ! -f "$file" ]] && {
+        echo "Error: unable to open input" 1>&2
+        echo "Error: Could not open '$file': No such file or directory. " 1>&2
+        return 1
+      }
+
+      local size
+      read -r size _ < <(du -s "$file")
+      (( size > 1000000 )) && {
+          __gs_warnmsg "File input to bash xxhsum is > 1M"
+          __gs_warnmsg "Consider installing xxhsum"
+      }
+
+      local DATA="$(hexdump -e '/1 "%02X"' -v -- "$file")"
+      printf '%s  %s\n' "$($algorithm "$DATA" 0)" "$file"
+  done
+}
+
+# uint64_t XXH64(text_in_hex, seed = 0)
+__gs_xxh64()
+{
+    local LC_ALL="C"
+
+    local -i PRIME64_1=0x9E3779B185EBCA87
+    local -i PRIME64_2=0xC2B2AE3D27D4EB4F
+    local -i PRIME64_3=0x165667B19E3779F9
+    local -i PRIME64_4=0x85EBCA77C2B2AE63
+    local -i PRIME64_5=0x27D4EB2F165667C5
+
+    local -i seed=${2:-0}
+    local inp="                                                                 "
+    local -i tmp=0
+    local -i zero=0
+    local -i h64=0
+    local input="$1"
+    local -i len=$(( ${#input} / 2 ))
+    local -i remaining=$len
+    local -i offset=0
+    local -i bEnd=$(( ${#input} - 64 ))
+    if (( remaining >= 32 )); then
+        local -i v1=$(( seed + PRIME64_1 + PRIME64_2 ))
+        local -i v2=$(( seed + PRIME64_2 ))
+        local -i v3=$(( seed ))
+        local -i v4=$(( seed - PRIME64_1 ))
+
+              while (( offset <= bEnd )); do
+            inp="${input:$offset:64}"
+            ((v1+=(($(( \
+    (((tmp=0x${inp:0:16})<<56)&(255<<56))|\
+    ((tmp<<40)&(255<<48))|\
+    ((tmp<<24)&(255<<40))|\
+    ((tmp<<8)&(255<<32))|\
+    ((((tmp>>(8))&(~(((1<<63)>>(8))<<1))))&(255<<24))|\
+    ((((tmp>>(24))&(~(((1<<63)>>(24))<<1))))&(255<<16))|\
+    ((((tmp>>(40))&(~(((1<<63)>>(40))<<1))))&(255<<8))|\
+    ((((tmp>>(56))&(~(((1<<63)>>(56))<<1))))&255)\
+)) \
+)*PRIME64_2)));v1=$((((v1<<31)|((v1>>(33))&0x7fffffff) )*PRIME64_1))
+            ((v2+=(($(( \
+    (((tmp=0x${inp:16:16})<<56)&(255<<56))|\
+    ((tmp<<40)&(255<<48))|\
+    ((tmp<<24)&(255<<40))|\
+    ((tmp<<8)&(255<<32))|\
+    ((((tmp>>(8))&(~(((1<<63)>>(8))<<1))))&(255<<24))|\
+    ((((tmp>>(24))&(~(((1<<63)>>(24))<<1))))&(255<<16))|\
+    ((((tmp>>(40))&(~(((1<<63)>>(40))<<1))))&(255<<8))|\
+    ((((tmp>>(56))&(~(((1<<63)>>(56))<<1))))&255)\
+)) \
+)*PRIME64_2)));v2=$((((v2<<31)|((v2>>(33))&0x7fffffff) )*PRIME64_1))
+            ((v3+=(($(( \
+    (((tmp=0x${inp:32:16})<<56)&(255<<56))|\
+    ((tmp<<40)&(255<<48))|\
+    ((tmp<<24)&(255<<40))|\
+    ((tmp<<8)&(255<<32))|\
+    ((((tmp>>(8))&(~(((1<<63)>>(8))<<1))))&(255<<24))|\
+    ((((tmp>>(24))&(~(((1<<63)>>(24))<<1))))&(255<<16))|\
+    ((((tmp>>(40))&(~(((1<<63)>>(40))<<1))))&(255<<8))|\
+    ((((tmp>>(56))&(~(((1<<63)>>(56))<<1))))&255)\
+)) \
+)*PRIME64_2)));v3=$((((v3<<31)|((v3>>(33))&0x7fffffff) )*PRIME64_1))
+            ((v4+=(($(( \
+    (((tmp=0x${inp:48:16})<<56)&(255<<56))|\
+    ((tmp<<40)&(255<<48))|\
+    ((tmp<<24)&(255<<40))|\
+    ((tmp<<8)&(255<<32))|\
+    ((((tmp>>(8))&(~(((1<<63)>>(8))<<1))))&(255<<24))|\
+    ((((tmp>>(24))&(~(((1<<63)>>(24))<<1))))&(255<<16))|\
+    ((((tmp>>(40))&(~(((1<<63)>>(40))<<1))))&(255<<8))|\
+    ((((tmp>>(56))&(~(((1<<63)>>(56))<<1))))&255)\
+)) \
+)*PRIME64_2)));v4=$((((v4<<31)|((v4>>(33))&0x7fffffff) )*PRIME64_1))
+            ((offset+=64))
+        done
+
+        h64=$(( (((v1<<1)|(((v1>>((64-1)))&(~(((1<<63)>>((64-1)))<<1)))))) + (((v2<<7)|(((v2>>((64-7)))&(~(((1<<63)>>((64-7)))<<1)))))) + (((v3<<12)|(((v3>>((64-12)))&(~(((1<<63)>>((64-12)))<<1)))))) + (((v4<<18)|(((v4>>((64-18)))&(~(((1<<63)>>((64-18)))<<1)))))) ))
+
+        zero=0
+    ((zero+=((v1)*PRIME64_2)));zero=$((((zero<<31)|((zero>>(33))&0x7fffffff) )*PRIME64_1))
+    h64=$(( ((h64 ^ zero) * PRIME64_1) + PRIME64_4 ))
+
+        zero=0
+    ((zero+=((v2)*PRIME64_2)));zero=$((((zero<<31)|((zero>>(33))&0x7fffffff) )*PRIME64_1))
+    h64=$(( ((h64 ^ zero) * PRIME64_1) + PRIME64_4 ))
+
+        zero=0
+    ((zero+=((v3)*PRIME64_2)));zero=$((((zero<<31)|((zero>>(33))&0x7fffffff) )*PRIME64_1))
+    h64=$(( ((h64 ^ zero) * PRIME64_1) + PRIME64_4 ))
+
+        zero=0
+    ((zero+=((v4)*PRIME64_2)));zero=$((((zero<<31)|((zero>>(33))&0x7fffffff) )*PRIME64_1))
+    h64=$(( ((h64 ^ zero) * PRIME64_1) + PRIME64_4 ))
+
+    else
+        h64=$((seed + PRIME64_5));
+    fi
+    remaining=$(( ${#input} - offset ))
+    ((h64 += len))
+    while (( remaining >= 16 )); do
+	local -i k1=0
+        ((k1+=(($(( \
+    (((tmp=0x${input:$offset:16})<<56)&(255<<56))|\
+    ((tmp<<40)&(255<<48))|\
+    ((tmp<<24)&(255<<40))|\
+    ((tmp<<8)&(255<<32))|\
+    ((((tmp>>(8))&(~(((1<<63)>>(8))<<1))))&(255<<24))|\
+    ((((tmp>>(24))&(~(((1<<63)>>(24))<<1))))&(255<<16))|\
+    ((((tmp>>(40))&(~(((1<<63)>>(40))<<1))))&(255<<8))|\
+    ((((tmp>>(56))&(~(((1<<63)>>(56))<<1))))&255)\
+)) \
+)*PRIME64_2)));k1=$((((k1<<31)|((k1>>(33))&0x7fffffff) )*PRIME64_1))
+        (( offset += 16 ))
+        h64=$(( h64 ^ k1 ));
+        h64=$(( (((h64<<27)|(((h64>>((64-27)))&(~(((1<<63)>>((64-27)))<<1))))) * PRIME64_1) + PRIME64_4 ));
+        ((remaining -= 16 ));
+    done
+    if (( remaining >= 8 )); then
+        (( h64 ^= ($(( \
+( ( (tmp=0x00000000${input:$offset:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+ * PRIME64_1) ))
+        (( offset += 8 ))
+        h64=$(( (((h64<<23)|(((h64>>((64-23)))&(~(((1<<63)>>((64-23)))<<1))))) * PRIME64_2) + PRIME64_3 ))
+        ((remaining-=8))
+    fi
+    while (( remaining > 0 )); do
+        (( h64 ^= (0x${input:$offset:2} * PRIME64_5) ))
+        (( offset += 2 ))
+        h64=$(( ((h64<<11)|(((h64>>((64-11)))&(~(((1<<63)>>((64-11)))<<1))))) * PRIME64_1 ))
+        ((remaining-=2))
+    done
+    (( h64 ^= ((h64>>(33))&(~(((1<<63)>>(33))<<1))) ))
+    (( h64 *= PRIME64_2 ))
+    (( h64 ^= ((h64>>(29))&(~(((1<<63)>>(29))<<1))) ))
+    (( h64 *= PRIME64_3 ))
+    (( h64 ^= ((h64>>(32))&(~(((1<<63)>>(32))<<1))) ))
+
+    printf "%016x" $h64
+}
+
+# uint32_t XXH32(data, seed = 0)
+__gs_xxh32()
+{
+    # Performance is multiplied by eightfold if we switch to C locale.
+    local LC_ALL="C"
+
+    local -i PRIME32_1=2654435761
+    local -i PRIME32_2=2246822519
+    local -i PRIME32_3=3266489917
+    local -i PRIME32_4=668265263
+    local -i PRIME32_5=374761393
+
+    local -i seed=${2:-0}
+    local -i tmp=0
+    local -i zero=0
+    local -i h32=0
+    local input="$1"
+    local -i len=$(( ${#input} / 2 ))
+    local -i remaining=$len
+    local -i offset=0
+    local -i bEnd=$(( ${#input} - 32 ))
+    if (( remaining >= 16 )); then
+        local -i v1=$(( ( ( (seed + PRIME32_1) & 0xFFFFFFFF) + PRIME32_2) & 0xFFFFFFFF ))
+        local -i v2=$(( (seed + PRIME32_2) & 0xFFFFFFFF ))
+        local -i v3=$(( seed ))
+        local -i v4=$(( (seed - PRIME32_1) & 0xFFFFFFFF ))
+
+        while (( offset <= bEnd )); do
+            local inp="${input:$offset:32}"
+            v1=$((((v1+(($(( \
+( ( (tmp=0x${inp:0:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+*PRIME32_2) & 0xFFFFFFFF)) & 0xFFFFFFFF) ));
+    v1=$(( ((((((v1)<<(13))|((v1>>(32-13)))))&0xFFFFFFFF&0xFFFFFFFF)*PRIME32_1) & 0xFFFFFFFF ))
+
+            v2=$((((v2+(($(( \
+( ( (tmp=0x${inp:8:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+*PRIME32_2) & 0xFFFFFFFF)) & 0xFFFFFFFF) ));
+    v2=$(( ((((((v2)<<(13))|((v2>>(32-13)))))&0xFFFFFFFF&0xFFFFFFFF)*PRIME32_1) & 0xFFFFFFFF ))
+
+            v3=$((((v3+(($(( \
+( ( (tmp=0x${inp:16:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+*PRIME32_2) & 0xFFFFFFFF)) & 0xFFFFFFFF) ));
+    v3=$(( ((((((v3)<<(13))|((v3>>(32-13)))))&0xFFFFFFFF&0xFFFFFFFF)*PRIME32_1) & 0xFFFFFFFF ))
+
+            v4=$((((v4+(($(( \
+( ( (tmp=0x${inp:24:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+*PRIME32_2) & 0xFFFFFFFF)) & 0xFFFFFFFF) ));
+    v4=$(( ((((((v4)<<(13))|((v4>>(32-13)))))&0xFFFFFFFF&0xFFFFFFFF)*PRIME32_1) & 0xFFFFFFFF ))
+
+            ((offset+=32))
+        done
+
+        h32=$(( ((((v1)<<(1))|((v1>>(32-1)))))&0xFFFFFFFF & 0xFFFFFFFF ))
+        h32=$(( (h32 + (((((v2)<<(7))|((v2>>(32-7)))))&0xFFFFFFFF ))  & 0xFFFFFFFF ))
+        h32=$(( (h32 + (((((v3)<<(12))|((v3>>(32-12)))))&0xFFFFFFFF )) & 0xFFFFFFFF ))
+        h32=$(( (h32 + (((((v4)<<(18))|((v4>>(32-18)))))&0xFFFFFFFF )) & 0xFFFFFFFF ))
+    else
+        h32=$(( (seed + PRIME32_5) & 0xFFFFFFFF ));
+    fi
+    remaining=$(( ${#input} - offset ))
+    h32=$(( (h32 + (len & 0xFFFFFFFF))  & 0xFFFFFFFF ))
+    while (( remaining >= 8 )); do
+        h32=$(( (h32 + ( ( $(( \
+( ( (tmp=0x${input:$offset:8}) << 24) & 0xff000000 ) | \
+            ( (tmp <<  8) & 0x00ff0000 ) | \
+            ( (((tmp>>(8))&(~(((1<<63)>>(8))<<1)))) & 0x0000ff00 ) | \
+            ( (((tmp>>(24))&(~(((1<<63)>>(24))<<1)))) & 0x000000ff ) \
+   )) \
+ * PRIME32_3) & 0xFFFFFFFF)) & 0xFFFFFFFF ))
+        (( offset += 8 ))
+        h32=$(( ((((((h32)<<(17))|((h32>>(32-17)))))&0xFFFFFFFF & 0xFFFFFFFF) * PRIME32_4) & 0xFFFFFFFF ))
+        ((remaining-=8))
+    done
+
+    while (( remaining > 0 )); do
+        h32=$(( (h32 + ( (0x${input:$offset:2} * PRIME32_5) & 0xFFFFFFFF) ) & 0xFFFFFFFF))
+        (( offset += 2 ))
+        h32=$(( ((((((h32)<<(11))|((h32>>(32-11)))))&0xFFFFFFFF & 0xFFFFFFFF) * PRIME32_1) & 0xFFFFFFFF ))
+        ((remaining-=2))
+    done
+    h32=$(( (h32 ^ (((h32>>(15))&(~(((1<<63)>>(15))<<1))) & 0xFFFFFFFF) )& 0xFFFFFFFF ))
+    h32=$(( (h32 * PRIME32_2) & 0xFFFFFFFF ))
+    h32=$(( (h32 ^ (((h32>>(13))&(~(((1<<63)>>(13))<<1))) & 0xFFFFFFFF) )& 0xFFFFFFFF ))
+    h32=$(( (h32 * PRIME32_3) & 0xFFFFFFFF ))
+    h32=$(( (h32 ^ (((h32>>(16))&(~(((1<<63)>>(16))<<1))) & 0xFFFFFFFF)) & 0xFFFFFFFF ))
+
+    printf "%08x" $h32
+}
+

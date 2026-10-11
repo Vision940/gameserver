@@ -4,66 +4,14 @@
 # The game server implements its own fp math for speed and to avoid external deps
 
 tl=$(git rev-parse --show-toplevel)
-sources=(${tl}/static/client/functions/{math,logging,utility})
+sources=(${tl}/dev/tests/test-funcs)
+sources+=(${tl}/static/client/functions/{math,logging,utility})
 for s in ${sources[@]}; do source $s; done
 
 echo "Unit test for static/client/functions/math started"
 
 run_math_tests() {
   local total=0 pass=0 fail=0
-
-  _assert() {
-    local fxn=$1
-    shift
-    local expected=$1
-    shift
-
-    local got
-    got="$($fxn $@)"
-    local status=$?
-
-    # Try to get REPLY if fxn output nothing
-    [[ -z "${got:-}" ]] && {
-      $fxn $@
-      status=$?
-      got="$REPLY"
-    }
-
-    ((total++))
-    if (( status == 0 )) && [[ "$got" == "$expected" ]]; then
-      ((pass++))
-      printf 'ok   %-30s -> %s\n' "$*" "$got"
-    else
-      ((fail++))
-      printf 'FAIL %-30s -> got=[%s] expected=[%s] status=%s\n' \
-        "$*" "$got" "$expected" "$status"
-    fi
-  }
-
-  _assert_fail() {
-    local fxn=$1
-    shift
-
-    local got
-    got="$($fxn $@ 2>/dev/null)"
-    local status=$?
-
-    # Try to get REPLY if fxn output nothing
-    [[ -z "${got:-}" ]] && {
-      $fxn $@ 2>/dev/null
-      status=$?
-      got="$REPLY"
-    }
-
-    ((total++))
-    if (( status != 0 )); then
-      ((pass++))
-      printf 'ok   %-30s -> failed as expected (status=%s)\n' "$*" "$status"
-    else
-      ((fail++))
-      printf 'FAIL %-30s -> expected failure, got=[%s]\n' "$*" "$got"
-    fi
-  }
 
   printf '\n--- fp ---\n'
   _assert __gs_fp '3'         add 1 2
