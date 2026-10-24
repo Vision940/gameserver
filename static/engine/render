@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+__gs_render() {
+  local game="$1"
+  __gs_required_args game || return 2
+
+  # Only continue if an event has occurred
+  $GS_PENDING_ANIMS && GS_FRAME_DIRTY=true
+  $GS_FRAME_DIRTY || return 0
+
+  # Reset pending anims to false pre-render
+  GS_PENDING_ANIMS=false
+
+  # Reset frame buffer & set base frame
+  __gs_frame reset || return 1
+  __gs_frame baseframe "$game" || return 1
+
+  # Get current scene
+  __gs_scene_manager top
+  local currScene=$REPLY
+
+  # Render current scene
+  __gs_required_fxns __gs_${game}_${currScene} || return 1
+  __gs_${game}_${currScene} render || return 1
+
+  # Print frame to screen
+  __gs_frame print || return 1
+
+  # Reset frame dirty flag
+  GS_FRAME_DIRTY=false
+}
+

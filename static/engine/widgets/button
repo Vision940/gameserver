@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 #TODO: docs
+# Sprites input are expected to have default and selected states
 
 __gs_button_manager() {
   local action="$1" id="$2"
@@ -13,16 +14,15 @@ __gs_button_manager() {
       local idx=${#GSW_BTNMAN["$id"]}
       local btnMan def label event extra
       for def in "$@"; do
-        # def var should be "label:event:x:y[:spr:selSpr]"
+        # def var should be "label:event:x:y[:spr]"
         IFS=':' read -r label event x y extra <<<"$def"
         __gs_required_args label event x y || return 2
 
         # Determine sprites
-        local spr selSpr
-        IFS=':' read -r spr selSpr extra <<<"$extra"
+        local spr
+        IFS=':' read -r spr extra <<<"$extra"
         local extraArgs=()
         [[ -n "$spr" ]] && extraArgs+=("-s" "$spr")
-        [[ -n "$selSpr" ]] && extraArgs+=("-S" "$selSpr")
 
         btnId="${id}_button_${idx}"
         __gs_button init "$btnId" "${extraArgs[@]}" -x "$x" -y "$y" "$label" "$event" || return 1
@@ -145,29 +145,19 @@ __gs_button() {
       shift 2
 
       # Determine sprites
-      local buttonSpr="widgets/button/button-${id}"
-      local selSpr="widgets/button/button-selected-${id}"
-      local customSprs=false
-      local opt OPTIND OPTARG
-      while getopts ':s:S:' opt; do
+      local opt OPTIND OPTARG buttonSpr
+      while getopts ':s:' opt; do
         case $opt in
-          s) buttonSpr="$OPTARG"; customSprs=true ;;
-          S) selSpr="$OPTARG"; customSprs=true ;;
+          s) buttonSpr="$OPTARG" ;;
           *) ((OPTIND--)); break ;;
         esac
       done
       (( OPTIND > 0 )) && shift $(( OPTIND - 1 ))
 
-      # Use id sprite paths if available
-      local sprPath
-      for sprPath in "$buttonSpr" "$selSpr"; do
-        [[ ! -f "${GS_CACHE}/sprites/${sprPath}.rawspr" ]] && {
-          buttonSpr="widgets/button/button-default"
-          selSpr="widgets/button/button-selected-default"
-          $customSprs && __gs_debugmsg "$sprPath not found, using default sprites for button \"$id\""
-          break
-        }
-      done
+      [[ -z "${buttonSpr}" ]] && {
+        __gs_debugmsg "Using default button sprite for \"$id\""
+        buttonSpr="widgets/button/button-default"
+      }
 
       # Init button node
       __gs_node init button "$id" -s "${buttonSpr}" "$@" || return 2
@@ -179,7 +169,6 @@ __gs_button() {
       # Set GSW vars
       GSW_BUTTON_LABEL["$id"]="$label"
       GSW_BUTTON_EVENT["$id"]="$event"
-      GSW_BUTTON_SEL_SPRITE["$id"]="$selSpr"
     ;;
     _click_) __gs_event raise "${GSW_BUTTON_EVENT["$id"]}" ;;
     _render_)
@@ -198,11 +187,18 @@ __gs_button() {
       local x=${GSN_X0["$id"]} y=${GSN_Y0["$id"]}
       local label="${GSW_BUTTON_LABEL["$id"]}"
 
-      if $sel; then
-        __gs_sprite draw "$id" "${GSW_BUTTON_SEL_SPRITE["$id"]}"
-      else
-        __gs_sprite draw "$id"
+      # Get expected state according to selected status
+      local state
+      $sel && state=selected || state=default
+
+      # Set state if changed
+      if [[ "${GSN_STATE["$id"]%%:*}" != "$state" ]]; then
+        GSN_STATE["$id"]="$state"
+        GSN_VISIBLE["$id"]="set"
       fi
+
+      # Draw self
+      __gs_frame draw "$id" || return 1
 
       # If no label, our work here is done
       [[ -n "$label" ]] || return 0
@@ -210,12 +206,11 @@ __gs_button() {
       # Draw text if label present
       local middleX=$(( x + ${GSN_WIDTH["$id"]} / 2 - ${#label} / 2 ))
       local middleY=$(( y + ${GSN_HEIGHT["$id"]} / 2 ))
-      $sel && __gs_text "$middleX" "$middleY" "$label" || __gs_text "$middleX" "$middleY" "$label"
+      __gs_text "$middleX" "$middleY" "$label"
     ;;
     _setup_)
       declare -gA GSW_BUTTON_LABEL=()
       declare -gA GSW_BUTTON_EVENT=()
-      declare -gA GSW_BUTTON_SEL_SPRITE=()
       declare -gA GSW_BTNMAN=()
       declare -gA GSW_BTNMAN_SEL=()
     ;;

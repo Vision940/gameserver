@@ -50,7 +50,10 @@ __gs_{{ game.cmd_name }}_common() {
       # Cache init is first because sprites and term need it
       __gs_cache init {{ game.cmd_name }} || return 1
       # Load sprites to cache dir for game
-      __gs_cache load-sprites {{ game.cmd_name }} || return 1
+      __gs_cache load-sprites {{ game.cmd_name }} || {
+        __gs_cache deinit
+        return 1
+      }
       # Init term for game
       __gs_{{ game.cmd_name }}_term init || return 1
       # Set up term env variables for game

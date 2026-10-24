@@ -65,7 +65,7 @@ __gs_scene_manager() {
       declare -ga GS_SCENE_STACK=()
       declare -gA GS_SCENE_EVENT_DEPTH=()
     ;;
-    _top_) REPLY=${GS_SCENE_STACK[-1]} ;;
+    _top_) REPLY="${GS_SCENE_STACK[-1]}" ;;
   esac
 }
 

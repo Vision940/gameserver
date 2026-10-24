@@ -38,7 +38,7 @@ __gs_popup_menu() {
       local w=${GSN_WIDTH["$id"]}
 
       # Draw static sprites to default frame on load
-      __gs_sprite draw "$id"
+      __gs_frame draw "$id" || return 1
       local labelLen="${#label}"
       __gs_text "$(( x0 + w / 2 - labelLen / 2 ))" "$(( y0 + 1 ))" "$label"
       __gs_frame save-def
@@ -48,8 +48,7 @@ __gs_popup_menu() {
 
       # Define buttons in manager
       #TODO: Configurable x offset
-      local sprites="widgets/button/button-thin:widgets/button/button-selected-thin"
-      local suffix=":$(( x0 + 3 )):0:$sprites"
+      local suffix=":$(( x0 + 3 )):0:widgets/button/button-thin"
       __gs_button_manager add-buttons "$id" "${@/%/$suffix}" || {
         __gs_errormsg "Could not init button manager"
         return 1
@@ -59,10 +58,9 @@ __gs_popup_menu() {
       local idx=0 y sprHeight
       while IFS= read -r btn; do
         [[ -z $btn ]] && continue
-        local buttonSpr="${GS_CACHE}/sprites/${GSN_SPRITE["$btn"]}"
-        __gs_sprite get-rawspr "$buttonSpr"
-        buttonSpr="$REPLY"
-        __gs_sprite cache-id "$buttonSpr"
+        #TODO: fix this -- probably need to check height of next-frame then reset state
+        local buttonSpr="${GS_CACHE}/sprites/${GSN_SPRITE["$btn"]}.rawspr"
+        __gs_sprite id-from-file "$buttonSpr"
         sprHeight="${GSS_ROWS["$REPLY"]}"
         y=$(( y0 + 3 + idx * (sprHeight + 1) ))
 

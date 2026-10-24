@@ -209,7 +209,9 @@ __gs_fp() {
 }
 
 __gs_calc() {
-  __gs_setdebug $1 || shift
+  [[ "${FUNCNAME[-1]}" == calc ]] && {
+    __gs_setdebug $1 || shift
+  }
   local int=false outvar decPlaces precision=false
   local opt OPTIND OPTARG
   while getopts ':ir:d:p' opt; do

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+# Not checking required args much here for speed
+
+__gs_frame() {
+  local action="$1"
+  case _${action}_ in
+    _baseframe_)
+      local game="$2"
+
+      # Use saved previous default frame cells if defined
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      if __gs_required_args -qnv ${var}; then
+        eval 'GS_FRAME_CELLS=("${'"$var"'[@]}")'
+        return 0
+      fi
+
+      # Use user-defined frame handling if available
+      if declare -f __gs_${game}_baseframe &>/dev/null; then
+        __gs_${game}_baseframe
+        return $?
+      fi
+
+      # Get default cells without __gs_sprite cache-id for speed
+      local blank="${GSS_CELL["GENERAL_ARCADE_BAR_CELL_RAW:0:0"]}"
+      local screen="${GSS_CELL["GENERAL_GAME_BACKGROUND_CELL_RAW:0:0"]}"
+
+      # Set default cells
+      local x y
+      for (( y=0; y<LINES; y++ )); do
+        for (( x=0; x<COLUMNS; x++ )); do
+          if (( x < GS_X_START || x >= GS_X_END )); then
+            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]="$blank"
+          else
+            GS_FRAME_CELLS[$(( y * COLUMNS + x ))]="$screen"
+          fi
+        done
+      done
+
+      $FUNCNAME save-def
+    ;;
+    _cleanup_) __gs_unset_vars_from_prefixes GS_FRAME_ ;;
+    _draw_)
+      local id="$2"
+      __gs_required_args id || return 2
+      local sprId="${GSN_SPRITE["$id"]}"
+
+      # Get raw spr if not provided one already
+      if [[ ! "$sprId" =~ "_RAW"$ ]]; then
+        # Don't draw if invisible
+        [[ -n "${GSN_VISIBLE["$id"]}" ]] || {
+          __gs_debugmsg "Skipping draw - node $id invisible" 4
+          return 0
+        }
+
+        # Determine actual frame of current spr animation to draw
+        local oldState="${GSN_STATE["$id"]}"
+        __gs_sprite next-frame "$id" || return 1
+        local sprId="$REPLY"
+
+        [[ -n "$sprId" ]] || {
+          __gs_debugmsg "Skipping draw - next-frame returned nothing" 4
+          return 0
+        }
+      fi
+
+      __gs_debugmsg "Drawing node id \"$id\" with spr \"$sprId\"" 3
+
+      local x0=${GSN_X0["$id"]}
+      local y0=${GSN_Y0["$id"]}
+      local rows=${GSS_ROWS["$sprId"]}
+
+      local base idx row col cols y cell
+      for (( row=0; row<rows; row++ )); do
+        y=$(( y0 + row ))
+        base=$(( y * COLUMNS + x0 ))
+        cols=${GSS_COLS["$sprId:$row"]}
+
+        for (( col=0; col<cols; col++ )); do
+          cell=${GSS_CELL["$sprId:$row:$col"]}
+          [[ -z $cell || $cell == ' ' ]] && continue
+          idx=$(( base + col ))
+          [[ ${GS_FRAME_CELLS[$idx]} == "$cell" ]] && continue
+          GS_FRAME_CELLS[$idx]="$cell"
+        done
+      done
+
+      GS_FRAME_DIRTY=true
+    ;;
+    _print_)
+      tput home
+      printf "%s" "${GS_FRAME_CELLS[@]}"
+    ;;
+    _reset_) declare -ga GS_FRAME_CELLS=() ;;
+    _restore-def_)
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      unset $var
+    ;;
+    _save-def_)
+      __gs_scene_manager top
+      local currScene="$REPLY"
+      local var="GS_FRAME_CELLS_DEF_${currScene^^}"
+      eval "$var"'=("${GS_FRAME_CELLS[@]}")'
+    ;;
+    _setup_)
+      declare -ga GS_FRAME_CELLS=()
+      GS_FRAME_DIRTY=true
+      GS_PENDING_ANIMS=false
+    ;;
+  esac
+}
+

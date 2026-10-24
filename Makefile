@@ -7,11 +7,12 @@ TEST_DIR := dev/tests
 #TODO: make sprites all
 .PHONY: sprites test
 sprites:
-	@if [ -z "$(TARGET)" ]; then \
-		echo 'Usage: make sprites <target>'; \
-		exit 1; \
-	fi
-	@if [ "$(TARGET)" = "all" ]; then \
+	@TARGET=$(TARGET); \
+	if [ -z "$$TARGET" ]; then \
+		echo 'Usage: make sprites <target> (defaulting to all)'; \
+		TARGET="all"; \
+	fi; \
+	if [ "$$TARGET" = "all" ]; then \
 		find static/games -type d -name sprites | while read dir; do \
 			echo "Generating sprites in $$dir"; \
 			find "$$dir" -type f -name '*.txt' -exec dev/gensprite {} \;; \
