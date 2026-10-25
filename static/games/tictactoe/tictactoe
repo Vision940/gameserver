@@ -7,8 +7,8 @@ __gs_tictactoe_main() {
   # Init game with common setup
   __gs_tictactoe_common init || return 1
 
-  # Start title screen
-  __gs_tictactoe_title open || return 1
+  # Start game
+  __gs_tictactoe_intro open || return 1
 
   # Init time vars
   local last_render_ms=0

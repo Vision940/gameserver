@@ -42,6 +42,7 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
   }
   {% endif %}
   __gs_longopts "$@" && return
+  (( $? == 2 )) && shift
   __gs_setdebug $1 || shift
 
   # Refresh api key in case client is out of date

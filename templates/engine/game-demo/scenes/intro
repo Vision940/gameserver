@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+#TODO: docs
+
+#TODO: Remove this when done w dev
+unset -f __gs_tictactoe_intro
+
+if ! declare -f __gs_{{ game.cmd_name }}_intro &>/dev/null; then
+  __gs_{{ game.cmd_name }}_intro() {
+    local action="$1"
+    __gs_required_args action || return 2
+    case _${action}_ in
+      _open_)
+        __gs_scene_manager push intro || return 1
+        __gs_node init anim engine-intro -x 'c-1' -y c -s "animations/engine-intro-{{ game.intro_version }}/engine-intro" || return 1
+      ;;
+      _render_)
+        __gs_node render engine-intro
+        $GS_PENDING_ANIMS || __gs_scene_manager move-to __gs_{{ game.cmd_name }}_title || return 1
+      ;;
+      _close_) __gs_node destroy engine-intro || return 1 ;&
+      *) __gs_scene "$@" intro || return 1 ;;
+    esac
+  }
+fi
+

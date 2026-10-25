@@ -95,12 +95,16 @@ __gs_source_file() {
 
 gameinit() {
   __gs_source_file functions/docs
+  __gs_source_file functions/logging
   __gs_longopts "$@" && return
+  (( $? == 2 )) && {
+    __gs_errormsg "$FUNCNAME: longopt not supported"
+    return 1
+  }
 
   # Prioritize id and whoami to avoid impersonation
   export GS_CURUSER=$(id -u -n 2>/dev/null || whoami 2>/dev/null || echo $USER)
 
-  __gs_source_file functions/logging
   local create=
   local cancel=false
   export GS_USER=$GS_CURUSER

@@ -15,7 +15,7 @@ class Game:
 
         # Basic game info
         self.version = cfg.get("version", "")
-        self.min_bash = cfg.get("min_bash", "4.2")
+        self.min_bash = cfg.get("min_bash", "4.4")
         self.cmd_name = cfg.get("cmd_name", name)
         self.full_name = cfg.get("full_name", "")
         self.short_name = cfg.get("short_name", self.cmd_name)
@@ -34,4 +34,7 @@ class Game:
         size = cfg.get("size", {})
         self.size_y_min = size.get("y_min", 30) # default min is 30 lines 81 columns
         self.size_xy_ratio = size.get("xy_ratio", 3)
+
+        # Intro animation
+        self.intro_version = cfg.get("intro_version", "v1")
 

@@ -37,6 +37,7 @@ unset import __GS_IMPORTS
 
 game() {
   __gs_longopts "$@" && return
+  (( $? == 2 )) && shift
   __gs_setdebug $1 || shift
 
   if [[ "${GS_API_KEY:-null}" == "null" && "$1" != "login" ]]; then

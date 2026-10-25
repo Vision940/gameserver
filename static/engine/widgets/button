@@ -49,14 +49,10 @@ __gs_button_manager() {
       return 0
     ;;
     _destroy_)
-      local btn
-      while IFS= read -r btn; do
-        [[ -n $btn ]] && __gs_button destroy "$btn"
-      done <<<"${GSW_BTNMAN["$id"]// /$'\n'}"
-
       unset \
         'GSW_BTNMAN["$id"]' \
         'GSW_BTNMAN_SEL["$id"]'
+      __gs_node destroy "$id"
     ;;
     _init_)
       GSW_BTNMAN["$id"]=""
@@ -171,6 +167,15 @@ __gs_button() {
       GSW_BUTTON_EVENT["$id"]="$event"
     ;;
     _click_) __gs_event raise "${GSW_BUTTON_EVENT["$id"]}" ;;
+    _destroy_)
+      local id="$2"
+      unset \
+        'GSW_BUTTON_LABEL["$id"]' \
+        'GSW_BUTTON_EVENT["$id"]' \
+        'GSW_BTNMAN["$id"]' \
+        'GSW_BTNMAN_SEL["$id"]'
+      __gs_node destroy "$id"
+    ;;
     _render_)
       shift 2
       local sel=false

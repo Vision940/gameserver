@@ -162,7 +162,8 @@ def game_demo(name):
     demo_files = [
         "game-demo",
         "scenes/pause",
-        "scenes/title"
+        "scenes/title",
+        "scenes/intro"
     ]
     game_obj = Game(name)
     script=""

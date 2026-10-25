@@ -118,20 +118,17 @@ __gs_node() {
       # Destroy all children
       local child
       while IFS= read -r child; do
-        [[ -n $child ]] && __gs_node destroy "$child"
-      done <<<"${GSN_CHILDREN["$id"]// /$'\n'}"
+        [[ -n $child ]] || continue
 
-      # Handle GSW-specific cleanup at id
-      case "${GSN_TYPE["$id"]}" in
-        button)
-          unset \
-            'GSW_BUTTON_LABEL["$id"]' \
-            'GSW_BUTTON_EVENT["$id"]' \
-            'GSW_BTNMAN["$id"]' \
-            'GSW_BTNMAN_SEL["$id"]' \
-        ;;
-        popup-menu) : ;;
-      esac
+        # Call type destructor if it exists
+        local type="${GSN_TYPE["$child"]}"
+        if declare -f "__gs_$type" &>/dev/null; then
+          __gs_$type destroy "$child"
+          continue
+        fi
+
+        __gs_node destroy "$child"
+      done <<<"${GSN_CHILDREN["$id"]// /$'\n'}"
 
       # Destroy GSN vars at id
       unset \
@@ -190,6 +187,11 @@ __gs_node() {
       local x0=${GSN_X0["$id"]} y0=${GSN_Y0["$id"]}
       local w=${GSN_WIDTH["$id"]} h=${GSN_HEIGHT["$id"]}
       (( x >= x0 && x < x0 + w && y >= y0 && y < y0 + h ))
+    ;;
+    _render_)
+      local id="$2"
+      __gs_required_args id || return 2
+      __gs_frame draw "$id" || return 1
     ;;
     *) return 2 ;;
   esac

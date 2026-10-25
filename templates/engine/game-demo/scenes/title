@@ -35,6 +35,7 @@ if ! declare -f __gs_{{ game.cmd_name }}_title &>/dev/null; then
       ;;
       #TODO: create button manager with play/settings/quit
       #TODO: quit button should run close which also kills the game
+      _close_) __gs_button_manager destroy title || return 1 ;&
       *) __gs_scene "$@" title || return 1 ;;
     esac
   }

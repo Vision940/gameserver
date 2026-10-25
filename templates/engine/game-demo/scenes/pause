@@ -31,7 +31,7 @@ if ! declare -f __gs_{{ game.cmd_name }}_pause &>/dev/null; then
         __gs_event subscribe pause pause '__gs_{{ game.cmd_name }}_pause close'
       ;;
       _render_) __gs_popup_menu render pause ;;
-      _close_) __gs_popup_menu destroy pause ;&
+      _close_) __gs_popup_menu destroy pause || return 1 ;&
       *) __gs_scene "$@" pause || return 1 ;;
     esac
   }

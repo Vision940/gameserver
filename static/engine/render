@@ -7,11 +7,12 @@ __gs_render() {
   __gs_required_args game || return 2
 
   # Only continue if an event has occurred
-  $GS_PENDING_ANIMS && GS_FRAME_DIRTY=true
-  $GS_FRAME_DIRTY || return 0
+  $GS_FRAME_DIRTY || $GS_PENDING_ANIMS || return 0
 
-  # Reset pending anims to false pre-render
+  # Reset flags to false pre-render
+  # This way, if something needs a redraw next frame, it can set these to true
   GS_PENDING_ANIMS=false
+  GS_FRAME_DIRTY=false
 
   # Reset frame buffer & set base frame
   __gs_frame reset || return 1
@@ -27,8 +28,5 @@ __gs_render() {
 
   # Print frame to screen
   __gs_frame print || return 1
-
-  # Reset frame dirty flag
-  GS_FRAME_DIRTY=false
 }
 

@@ -49,7 +49,7 @@ make-bmp() {
 			c=${SPRITE[height - y - 1]}
 			c=${c:x:1}
       a=1
-      if [[ "$c" == " " ]]; then
+      if [[ " " =~ "$c" ]]; then
         a=0
       fi
 

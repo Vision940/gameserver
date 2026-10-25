@@ -106,11 +106,12 @@ __gs_cache_log() {
     _deinit_)
       __gs_required_args -nd GS_CACHE GS_CACHE_LOG || return 1
       if [[ -f "$GS_CACHE_LOG" ]]; then
+        [[ -n "$GS_DEBUGFILE" ]] && command cp $GS_CACHE_LOG $GS_DEBUGFILE
         command cat "$GS_CACHE_LOG"
         command rm -f "$GS_CACHE_LOG" 2>/dev/null
       fi
       exec 2<> $(tty)
-      unset GS_CACHE_LOG
+      unset GS_CACHE_LOG GS_DEBUGFILE
     ;;
   esac
 }

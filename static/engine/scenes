@@ -2,6 +2,10 @@
 
 #TODO: docs
 #Expain how calling gs_scene can save duplicate code
+# Scenes are meant to be layered, but sometimes a "base scene" will need to call another "base scene"
+# for example, intro->title or title->local game
+# In this case, move-to is useful. It prints a blank "loading" style frame to communicate a more substantial change in game state than just pushing a new scene
+# This also makes it easy to send the scene to a new scene on an event/condition without considering all needed logic
 
 __gs_scene_manager() {
   local action=$1
@@ -55,11 +59,24 @@ __gs_scene_manager() {
       GS_SCENE_STACK+=("$scene")
 
       __gs_event clear-scene
+      GS_FRAME_DIRTY=true
     ;;
     _pop_)
       local scene="${GS_SCENE_STACK[-1]}"
       __gs_debugmsg "Popped scene \"${scene}\"" 2
       unset 'GS_SCENE_EVENT_DEPTH["$scene"]' 'GS_SCENE_STACK[-1]'
+      GS_FRAME_DIRTY=true
+    ;;
+    _move-to_)
+      local sceneFxn="$2"
+      __gs_required_args sceneFxn || return 2
+      local callingFxn="${FUNCNAME[1]}" || return 1
+      local scene="${GS_SCENE_STACK[-1]}" || return 1
+
+      __gs_frame baseframe || return 1
+      __gs_frame print || return 1
+      $callingFxn close || return 1
+      $sceneFxn open || return 1
     ;;
     _setup_)
       declare -ga GS_SCENE_STACK=()

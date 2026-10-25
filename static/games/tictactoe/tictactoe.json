@@ -7,5 +7,6 @@
   "imports": [
     "games/tictactoe-common",
     "static/engine/widgets/grid"
-  ]
+  ],
+  "intro_version": "v1"
 }

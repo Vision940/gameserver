@@ -14,7 +14,6 @@ __gs_sprite() {
     _cache_)
       local file
       while read -r file; do
-        __gs_debugmsg "Caching sprite file \"$file\"" 3
         if [[ "$file" =~ ".rawspr"$ ]]; then
           __gs_sprite_parser parse-rawspr "$file" || return 1
         else
@@ -144,6 +143,8 @@ __gs_sprite() {
       return 0
     ;;
     _setup_)
+      [[ ${GSS_SETUP:-false} == true ]] && return 0
+
       declare -gA GSS_CELL=()
       declare -gA GSS_ROWS=()
       declare -gA GSS_COLS=()
@@ -151,6 +152,8 @@ __gs_sprite() {
       declare -ga GSS_RAWSPRS=()
       declare -ga GSS_SPRS=()
       declare -gA GSS_FRAMES=()
+
+      GSS_SETUP=true
     ;;
   esac
 }
@@ -223,6 +226,7 @@ __gs_sprite_parser() {
       __gs_sprite id-from-file "$file"
       local sprId="$REPLY"
       [[ " ${GSS_SPRS[@]} " =~ " $sprId " ]] && return 0
+      __gs_debugmsg "Caching sprite file \"$file\"" 3
 
       local text param val
       local state="default" # This is ${GSN_STATE[$id]%:*}
@@ -283,6 +287,7 @@ __gs_sprite_parser() {
       __gs_sprite id-from-file "$rawfile"
       local sprId="$REPLY"
       [[ " ${GSS_RAWSPRS[@]} " =~ " $sprId " ]] && return 0
+      __gs_debugmsg "Caching raw sprite file \"$rawfile\"" 3
 
       local text row=0 col maxw=0
       while IFS= read -r text; do

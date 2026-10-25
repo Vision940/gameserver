@@ -5,5 +5,6 @@
   "short_name": "hl",
   "imports": [
     "games/hilo-common"
-  ]
+  ],
+  "intro_version": "v1"
 }

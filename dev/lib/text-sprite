@@ -47,11 +47,15 @@ genSprTxt() {
   while IFS= read -r line; do
     c=0
     while IFS= read -r -n 1 char; do
-      ((c++))
-      [[ -z "$char" || "$char" =~ ^[[:space:]]$ ]] && continue
+      [[ -z "$char" || "$char" =~ ^[[:space:]]$ ]] && {
+        ((c++))
+        continue
+      }
       echo "#$r,$c:$char" >> $sprTxtOut
+      ((c++))
     done <<<"$line"
-    ((r++))
+    # Increment 2 rows because text is only in fg
+    ((r+=2))
   done < $asciiFile
   echo "generated text map '$sprTxtOut'"
 }
