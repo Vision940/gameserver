@@ -45,7 +45,7 @@ __gs_{{ game.cmd_name }}_term() {
       local trapTxt="__gs_term deinit ${fxnPrefix}_main; ${fxnPrefix}_exit ${fxnPrefix}_main && trap - RETURN"
       trap "$trapTxt" RETURN
 
-      __gs_term init -t ${fxnPrefix}_exit || {
+      __gs_term init -t || {
         __gs_errormsg "Could not init term"
         return 1
       }

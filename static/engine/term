@@ -5,7 +5,7 @@
 ##   games to use to enter the alt screen and draw title screens
 ##
 ## Functions:
-##   __gs_term (init -t EXIT [noparent]|deinit PARENT)
+##   __gs_term (init -t [noparent]|deinit PARENT)
 ##     function to handle init/deinit of term into alt screen for games
 ##     typically called from __gs_GAME_term template in templates/engine/game-utils
 ##     actions:
@@ -39,16 +39,13 @@ __gs_term() {
       }
       shift
 
-      local winchExit="$2"
-      __gs_required_args winchExit || return 2
-
       # Make sure cache inited
       __gs_required_args -n GS_CACHE || return 1
 
       # Warn if not called from template
-      [[ ${FUNCNAME[1]} =~ __gs_.*_term || "$3" == "noparent" ]] || {
+      [[ ${FUNCNAME[1]} =~ __gs_.*_term || "$2" == "noparent" ]] || {
         __gs_warnmsg "\`__gs_term init\` is best run from the __gs_{{ game.cmd_name }}_term template in templates/engine/game-utils"
-        __gs_warnmsg "Run with \$3 set to noparent to suppress this message"
+        __gs_warnmsg "Run with \$2 set to noparent to suppress this message"
       }
 
       # Ensure running interactively
@@ -59,7 +56,7 @@ __gs_term() {
       }
 
       __gs_trap_check SIGWINCH || return 1
-      trap "__gs_winch_handler $winchExit" WINCH
+      trap "__gs_winch_handler" WINCH
 
       shopt -s checkwinsize
       (:) # this should ensure LINES and COLUMNS are set
@@ -105,14 +102,7 @@ __gs_term() {
 }
 
 __gs_winch_handler() {
-  local exitFxn="$1"
-  __gs_required_args exitFxn || return 2
-  declare -f $exitFxn &>/dev/null || {
-    __gs_errormsg "$exitFxn arg to $FUNCNAME is not a function"
-    return 2
-  }
   __gs_errormsg "Terminal resized during game" fatal
-  __gs_term deinit
-  $exitFxn __gs_winch_handler # Run exit fxn
+  GS_EXIT=true
 }
 

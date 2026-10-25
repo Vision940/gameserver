@@ -3,7 +3,6 @@
 #TODO: docs
 # Example scene for title screen
 # Used by default if __gs_GAME_title is not defined
-#TODO: This should be led into by the engine animation when that is implemented
 
 #TODO: Remove this when done w dev
 unset -f __gs_tictactoe_title
