@@ -15,7 +15,7 @@ __gs_popup_menu() {
     ;;
     _init_)
       shift 2
-      __gs_node init popup-menu "$id" -s "widgets/popup-menu/menu-box-${id}" "$@" || return 2
+      __gs_node init popup_menu "$id" -s "widgets/popup-menu/menu-box-${id}" "$@" || return 2
       shift "$(( REPLY - 2 ))"
 
       local label="Menu"

@@ -146,8 +146,8 @@ devserver() {
 }
 
 if ! ( return 0 2>/dev/null ); then
-  devserver $@
+  devserver "$@"
 else
-  (($#)) && devserver $@
+  (($#)) && devserver "$@"
 fi
 

@@ -83,16 +83,7 @@ __gs_node() {
 
       # Use c as center position and resolve equation inputs
       $centered && x=c y=c
-      if [[ "$x" =~ "c" ]]; then
-        local xOffset=$(( w / 2 + w % 2 ))
-        local xCenter=$(( COLUMNS / 2 - xOffset ))
-        __gs_calc -ir x "${x//c/$xCenter}" || return 1
-      fi
-      if [[ "$y" =~ "c" ]]; then
-        local yOffset=$(( h / 2 - h % 2 ))
-        local yCenter=$(( LINES / 2 - yOffset ))
-        __gs_calc -ir y "${y//c/$yCenter}" || return 1
-      fi
+      __gs_term_resolve_center $w $h || return 1
       __gs_required_args x y || return 2
 
       # Init position variables for this node

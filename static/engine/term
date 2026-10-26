@@ -21,6 +21,10 @@
 ##                         matching ^GS_[XY]_
 ##   __gs_winch_handler EXIT - deinit term and run EXIT fxn on winch signal
 ##                             trapped to WINCH at term init runtime
+##   __gs_term_resolve_center WIDTH HEIGHT
+##     resolve equations for x and y given WIDTH and HEIGHT of object being centered
+##     expects x and y set in environment where called, and resolves 'c' to center given
+##       offsets introduced by the provided WIDTH and HEIGHT
 ##
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
@@ -104,5 +108,24 @@ __gs_term() {
 __gs_winch_handler() {
   __gs_errormsg "Terminal resized during game" fatal
   GS_EXIT=true
+}
+
+__gs_term_resolve_center() {
+  local w="$1" h="$2"
+  __gs_required_args w h x y || return 2
+
+  # Use c as center position and resolve equation inputs
+  if [[ "$x" =~ "c" ]]; then
+    local xOffset=$(( w / 2 + w % 2 ))
+    local xCenter=$(( COLUMNS / 2 - xOffset ))
+    __gs_calc -ir x "${x//c/$xCenter}" || return 1
+  fi
+  if [[ "$y" =~ "c" ]]; then
+    local yOffset=$(( h / 2 - h % 2 ))
+    local yCenter=$(( LINES / 2 - yOffset ))
+    __gs_calc -ir y "${y//c/$yCenter}" || return 1
+  fi
+
+  return 0
 }
 

@@ -10,6 +10,12 @@
 ## .ascii files are named as such to differentiate them from .txt files -
 ##   they aren't limited to just ascii characters
 ##
+## .asciiopts files can define options in the format ^param=val$
+##   and comments in the form ^#.*$
+##   the only currently supported opt is bold=true
+## default.asciiopts is treated as a global config for the dir
+##
+##
 ## Functions:
 ##   genSprTxt ASCIIFILE SPRTXTOUT
 ##     genSprTxt creates SPRTXTOUT from ASCIIFILE
@@ -30,6 +36,29 @@
 ## Author: Daniel Tucker <github.com/Vision940>
 ##
 
+_readSprTxtOpts() {
+  REPLY=""
+  local file="${asciiFile}opts"
+  [[ -f "$file" ]] || file="${asciiFile%/*}/default.asciiopts"
+  [[ -f "$file" ]] || return 0
+  while IFS= read -r text; do
+    text="${text%%#*}"
+    text="${text%%[$'\t\r\n ']}"
+
+    if [[ "$text" =~ ^([^=]+)=(.*)$ ]]; then
+      param="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      case "$param" in
+        bold)
+          [[ "$val" == "true" ]] && REPLY+="1;"
+        ;;
+      esac
+    elif [[ -n "$text" ]]; then
+      echo "WARN: ignoring \"$text\" in $file"
+    fi
+  done < "$file"
+}
+
 genSprTxt() {
   local asciiFile="${1?"ERROR: Need asciiFile to $FUNCNAME call"}"
   local sprTxtOut="${2?"ERROR: Need sprTxtOut to $FUNCNAME call"}"
@@ -42,6 +71,9 @@ genSprTxt() {
   }
   echo -n "" > $sprTxtOut
 
+  _readSprTxtOpts
+  local opts="${REPLY%;}"
+
   local c=0 r=0
   local line char
   while IFS= read -r line; do
@@ -51,7 +83,7 @@ genSprTxt() {
         ((c++))
         continue
       }
-      echo "#$r,$c:$char" >> $sprTxtOut
+      echo "#$r,$c:$char${opts:+":$opts"}" >> $sprTxtOut
       ((c++))
     done <<<"$line"
     # Increment 2 rows because text is only in fg
@@ -64,11 +96,12 @@ sprTxtCharAt() {
   local file="${1?ERROR: Need file}"
   local row="$2" col="$3"
   local result
-  result="${ sed -ne "/^#$row,$col:.$/s/.*:\(.\)/\1/p" $file; }" || return 1
+  result="${ sed -ne "/^#$row,$col:./s/^#$row,$col:\(.\).*$/\1/p" $file; }" || return 1
+  local opts="${ sed -ne "/^#$row,$col:.:.*$/s/^#$row,$col:.:\(.*\)/\1/p" $file; }"
+  [[ -n "$opts" && -n "$ansi" ]] && ansi="${opts};${ansi}"
+  [[ -n "$opts" && -n "$next_ansi" ]] && next_ansi="${opts};${next_ansi}"
   [[ -n "$result" ]] && REPLY="$result"
 }
-
-#TODO: fxn to convert ascii file to spr if wanting only ascii as a spr
 
 # Run if not sourced
 if ! ( return 0 2>/dev/null ); then

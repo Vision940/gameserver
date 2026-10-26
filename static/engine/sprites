@@ -143,8 +143,6 @@ __gs_sprite() {
       return 0
     ;;
     _setup_)
-      [[ ${GSS_SETUP:-false} == true ]] && return 0
-
       declare -gA GSS_CELL=()
       declare -gA GSS_ROWS=()
       declare -gA GSS_COLS=()
@@ -152,8 +150,6 @@ __gs_sprite() {
       declare -ga GSS_RAWSPRS=()
       declare -ga GSS_SPRS=()
       declare -gA GSS_FRAMES=()
-
-      GSS_SETUP=true
     ;;
   esac
 }
@@ -162,7 +158,17 @@ __gs_sprite() {
 __gs_sprite_config() {
   local id="$1" state="$2" param="$3" expected="$4"
   local result="${GSS_FRAMES["${id}:${state}:${param}"]:-null}"
-  [[ "$result" == "null" ]] && local result="${GSS_FRAMES["${id}:default:${param}"]:-null}"
+  [[ "$result" == "null" && "$param" != "next-state" ]] &&
+    local result="${GSS_FRAMES["${id}:default:${param}"]:-null}"
+  if [[ "$result" =~ ^\[.+\]$ ]]; then
+    result="${result#\[}"
+    result="${result%\]}"
+
+    local -a results
+    IFS=, read -ra results <<< "$result"
+    result="${results[RANDOM % ${#results[@]}]}"
+  fi
+
   __gs_debugmsg "Sprite config [${id}:${state}:${param}]=${GSS_FRAMES["${id}:${state}:${param}"]:-null}" 5
 
   REPLY="$result"
@@ -228,10 +234,12 @@ __gs_sprite_parser() {
       [[ " ${GSS_SPRS[@]} " =~ " $sprId " ]] && return 0
       __gs_debugmsg "Caching sprite file \"$file\"" 3
 
-      local text param val
+      local text param val frames i
       local state="default" # This is ${GSN_STATE[$id]%:*}
       local states=($state)
       while IFS= read -r text; do
+        frames="${text##*;}"
+        text="${text%%;*}"
         text="${text%%#*}"
         text="${text%%[$'\t\r\n ']}"
 
@@ -252,7 +260,10 @@ __gs_sprite_parser() {
           if [[ ! " ${GSS_RAWSPRS[@]} " =~ " $rawsprId " ]]; then
             $FUNCNAME parse-rawspr "$rawsprfile" || return 1
           fi
-          GSS_FRAMES["${sprId}:${state}:frames"]+="$rawsprId "
+          [[ "$frames" =~ ^[0-9]+$ ]] || frames=1
+          for (( i=0 ; i < frames ; i++ )); do
+            GSS_FRAMES["${sprId}:${state}:frames"]+="$rawsprId "
+          done
         fi
       done < "$file"
 
@@ -328,6 +339,9 @@ __gs_text() {
   shift $(( OPTIND - 1 ))
 
   local x="$1" y="$2" text="$3"
+  local textLen="${#text}"
+  __gs_term_resolve_center $textLen 0
+
   local reset=$'\x1b[0m'
   local ansi=""
 
@@ -339,7 +353,7 @@ __gs_text() {
     currCell="${GS_FRAME_CELLS["$pos"]}"
 
     # Determine text color (light vs. dark) smartly from target cell
-    if [[ "$currCell" != "$prevCell" && "$currCell" =~ $'\e'\[48\;2\;([0-9]+)\;([0-9]+)\;([0-9]+)m ]]; then
+    if [[ "$currCell" != "$prevCell" && "$currCell" =~ $'\e'\[[^m]*48\;2\;([0-9]+)\;([0-9]+)\;([0-9]+)[^m]*m ]]; then
       bg="${BASH_REMATCH[0]}"
       r=${BASH_REMATCH[1]}
       g=${BASH_REMATCH[2]}

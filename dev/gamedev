@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+## dev/gamedev ##
+## gamedev provides a function to simplify common dev tasks
+##
+## Source or run this file to use the gamedev function
+##
+## Current actions:
+##   ascii-to-txt ASCIIFILE B T
+##     convert ASCIIFILE x.ascii to x.txt automatically, using B for the
+##       background pal character and T for the text pal character
+##     default value for B is 'b' and T is '.'
+##     simplifies creating sprites from pure ascii
+##
+## Author: Daniel Tucker <github.com/Vision940>
+##
+
+gamedev() {
+  local action="$1"
+  case _${action}_ in
+    _ascii-to-txt_) : Convert .ascii to simple .txt spr
+      local file="${2?ERROR: No .ascii file provided to convert}"
+
+      local background="${3:-b}" ascii="${4:-.}"
+      background="${background:0:1}"
+      ascii="${ascii:0:1}"
+      echo "Using '$background' for background and '$ascii' for ascii"
+
+      local textfile="${file%.ascii}.txt"
+      [[ "$file" =~ ".ascii"$ ]] || {
+        echo ERROR: File \"$file\" not *.ascii 1>&2
+        return 1
+      }
+      [[ -f "$file" ]] || {
+        echo ERROR: File \"$file\" does not exist 1>&2
+        return 1
+      }
+      [[ -f "$textfile" ]] && {
+        echo ERROR: Text file \"$textfile\" already exists 1>&2
+        return 1
+      }
+      touch "$textfile"
+      local text longest=0
+      while IFS= read -r text; do
+        local len="${#text}"
+        (( len > longest )) && longest=$len
+      done < "$file"
+      while IFS= read -r text; do
+        text="${text%%#*}"
+        text="${text%%[$'\t\r\n ']}"
+        [[ -n "$text" ]] || {
+          printf '\n\n' >> "$textfile"
+          continue
+        }
+        local bg
+        printf -v bg '%-*s' "$longest" ""
+        echo ${bg// /$background} >> "$textfile"
+        echo "${text//[^ ]/$ascii}" >> "$textfile"
+      done < "$file"
+      echo Created \"$textfile\" from \"$file\"
+      return 0
+    ;;
+  esac
+}
+declare -f __gs_source_template &>/dev/null && __gs_source_template gamedev-completion
+__gs_gamedev_comp() {
+  (( COMP_CWORD >= 2 )) && compopt -o default
+}
+
+if ! ( return 0 2>/dev/null ); then
+  gamedev "$@"
+else
+  (($#)) && gamedev "$@"
+fi
+

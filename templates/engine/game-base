@@ -56,8 +56,7 @@ __gs_{{ game.cmd_name }}_imports {{ game.imports | join(' ') }}
   case _$1_ in
     {% if game.has_main %}
     _play_) : Play the game
-      #TODO: loading msg here
-      echo I\'m playing {{ game.full_name }}!
+      __gs_infomsg "Now playing {{ game.full_name }}!"
       __gs_{{ game.cmd_name }}_main
     ;;
     {% endif %}

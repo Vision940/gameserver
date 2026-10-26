@@ -47,31 +47,31 @@ print_half_blocks() {
 
             local ansi=""
             if (( ${color1[3]} == 1 )); then
-              ansi+="esc[48;2;${color1[0]};${color1[1]};${color1[2]}m"
+              ansi+="48;2;${color1[0]};${color1[1]};${color1[2]};"
             fi
             if (( ${color2[3]} == 1 )); then
-              ansi+="esc[38;2;${color2[0]};${color2[1]};${color2[2]}m"
+              ansi+="38;2;${color2[0]};${color2[1]};${color2[2]};"
             fi
 
             local next_ansi=""
             if (( ${color3[3]} == 1 )); then
-              next_ansi+="esc[48;2;${color3[0]};${color3[1]};${color3[2]}m"
+              next_ansi+="48;2;${color3[0]};${color3[1]};${color3[2]};"
             fi
             if (( ${color4[3]} == 1 )); then
-              next_ansi+="esc[38;2;${color4[0]};${color4[1]};${color4[2]}m"
+              next_ansi+="38;2;${color4[0]};${color4[1]};${color4[2]};"
             fi
 
+            _get_next_char "$sprTxtFile" "$y" "$x"
+            local char="$REPLY"
+
             local suffix=""
-            local prefix="$ansi"
+            local prefix="${ansi:+"esc[${ansi%;}m"}"
             if [[ "$next_ansi" != "$ansi" ]]; then
                 suffix="esc[0m"
             fi
             if [[ "$prev_ansi" == "$ansi" ]]; then
                 prefix=""
             fi
-
-            _get_next_char "$sprTxtFile" "$y" "$x"
-            local char="$REPLY"
 
             # Full reset if not opaque
             if (( ${color1[3]} == 0 || ${color2[3]} == 0 )); then

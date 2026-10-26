@@ -73,6 +73,8 @@ __gs_cache() {
       }
       command rm -f "$spriteGz"
 
+      [[ "$game" == "default" ]] && return 0
+
       # Need sprite function to cache sprites in env
       __gs_required_fxns __gs_sprite || return 1
 
